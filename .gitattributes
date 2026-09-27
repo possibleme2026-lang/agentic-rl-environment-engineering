@@ -1,0 +1,15 @@
+# Normalise line endings so the repo behaves the same on every platform.
+* text=auto eol=lf
+
+# The blog is a single self-contained file; keep it byte-stable so diffs stay
+# readable and the offline-render guarantee is easy to audit.
+*.html text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+
+# Binary-ish assets, if any are ever added.
+*.png binary
+*.jpg binary
+*.woff2 binary

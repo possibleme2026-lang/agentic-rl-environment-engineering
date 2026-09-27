@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How Xiaomi Actually Does RL — Reading the MiMo-V2.6 Open Stack</title>
+<style>
+  :root{
+    --bg:#fbfaf8; --panel:#ffffff; --ink:#1a1a1a; --ink2:#3d3d3d; --muted:#6b6b6b;
+    --line:#e4e0da; --line2:#efebe5;
+    --accent:#c0392b; --accent2:#2c6e8f; --accent3:#6b5b95; --ok:#2d7a4f; --warn:#b8860b;
+    --code-bg:#f5f2ed; --code-ink:#2b2b2b;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    --serif:Georgia,"Songti SC","Source Han Serif SC",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:16.5px;line-height:1.78;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:790px;margin:0 auto;padding:0 26px 110px}
+
+  /* ---- header ---- */
+  header.hero{
+    border-bottom:1px solid var(--line);
+    padding:74px 0 44px;margin-bottom:46px;
+  }
+  .kicker{
+    font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);font-weight:700;margin-bottom:20px;
+  }
+  h1{
+    font-family:var(--serif);font-size:41px;line-height:1.2;font-weight:700;
+    margin:0 0 20px;letter-spacing:-.015em;
+  }
+  .sub{font-size:19px;color:var(--ink2);line-height:1.6;margin:0 0 28px;font-weight:400}
+  .meta{
+    font-size:13.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:9px;align-items:center;
+  }
+  .meta .dot{color:var(--line)}
+  .meta code{font-size:12.5px}
+
+  /* ---- typography ---- */
+  h2{
+    font-family:var(--serif);font-size:29px;font-weight:700;margin:66px 0 20px;
+    letter-spacing:-.01em;padding-bottom:11px;border-bottom:1px solid var(--line2);
+  }
+  h3{font-family:var(--serif);font-size:21.5px;font-weight:700;margin:42px 0 14px}
+  h4{font-size:16.5px;font-weight:700;margin:30px 0 10px;color:var(--ink2)}
+  p{margin:0 0 19px}
+  a{color:var(--accent2);text-decoration:none;border-bottom:1px solid rgba(44,110,143,.28)}
+  a:hover{border-bottom-color:var(--accent2)}
+  strong{font-weight:700;color:#000}
+  em{font-style:italic}
+  ul,ol{margin:0 0 19px;padding-left:26px}
+  li{margin:0 0 9px}
+  li>ul,li>ol{margin-top:9px;margin-bottom:0}
+
+  /* ---- code ---- */
+  code{
+    font-family:var(--mono);font-size:13.2px;background:var(--code-bg);
+    padding:2px 5.5px;border-radius:4px;color:#8a3324;border:1px solid #eae5dd;
+    word-break:break-word;
+  }
+  pre{
+    background:var(--code-bg);border:1px solid #e6e0d7;border-left:3px solid var(--accent2);
+    border-radius:7px;padding:16px 18px;overflow-x:auto;margin:0 0 22px;
+    font-size:12.8px;line-height:1.65;
+  }
+  pre code{background:none;padding:0;border:none;color:var(--code-ink);font-size:12.8px}
+  .filepath{
+    font-family:var(--mono);font-size:12px;background:#eee9e1;color:#5a5248;
+    padding:2px 7px;border-radius:4px;display:inline-block;margin-bottom:7px;
+    border:1px solid #e2dbd1;
+  }
+
+  /* ---- callouts ---- */
+  .note{
+    background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent3);
+    border-radius:7px;padding:17px 20px;margin:0 0 24px;font-size:15.3px;
+  }
+  .note .lbl{
+    font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;
+    color:var(--accent3);display:block;margin-bottom:8px;
+  }
+  .note p:last-child{margin-bottom:0}
+  .warn{border-left-color:var(--warn);background:#fffdf5}
+  .warn .lbl{color:var(--warn)}
+  .good{border-left-color:var(--ok);background:#f6fbf7}
+  .good .lbl{color:var(--ok)}
+  .key{border-left-color:var(--accent);background:#fdf7f6}
+  .key .lbl{color:var(--accent)}
+
+  /* ---- tables ---- */
+  table{
+    width:100%;border-collapse:collapse;margin:0 0 24px;font-size:14.3px;
+    background:var(--panel);border:1px solid var(--line);border-radius:7px;overflow:hidden;
+  }
+  th{
+    background:#f4f0ea;text-align:left;padding:11px 14px;font-weight:700;
+    font-size:12.6px;letter-spacing:.03em;border-bottom:1px solid var(--line);color:#4a443c;
+  }
+  td{padding:10px 14px;border-bottom:1px solid var(--line2);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td code{font-size:12.3px}
+  .num{font-family:var(--mono);font-size:13.2px;text-align:right;white-space:nowrap}
+
+  /* ---- misc ---- */
+  hr{border:none;border-top:1px solid var(--line);margin:56px 0}
+  .toc{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:22px 26px;margin:0 0 46px;font-size:14.8px;
+  }
+  .toc .lbl{
+    font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;
+    color:var(--muted);margin-bottom:13px;
+  }
+  .toc ol{margin:0;padding-left:22px;columns:1}
+  .toc li{margin:0 0 6px}
+  .toc a{color:var(--ink2);border-bottom:none}
+  .toc a:hover{color:var(--accent2)}
+  footer{
+    margin-top:70px;padding-top:26px;border-top:1px solid var(--line);
+    font-size:13.6px;color:var(--muted);
+  }
+  .eq{
+    background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    padding:15px 20px;margin:0 0 22px;font-family:var(--mono);font-size:13.6px;
+    line-height:1.85;overflow-x:auto;
+  }
+  .eq .tag{float:right;color:var(--muted);font-size:12.4px}
+  mark{background:#fdf0c8;padding:1px 3px;border-radius:3px}
+  .lede{font-size:18.4px;color:var(--ink2);line-height:1.7}
+  .lede strong{color:#000}
+  @media (max-width:640px){
+    h1{font-size:31px} h2{font-size:24px} body{font-size:16px}
+    .wrap{padding:0 18px 80px} header.hero{padding:46px 0 32px}
+    pre{font-size:11.6px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">RL Post-Training · Code Reading</div>
+  <h1>How Xiaomi Actually Does RL</h1>
+  <p class="sub">Reading the MiMo-V2.6 open stack — the technical report, the <code>XiaomiMiMo/verl</code> fork, 1,000+ real task environments, and 3,764 Docker images — and mapping every claim to the code that implements it.</p>
+  <div class="meta">
+    <span>Evidence-based walkthrough</span><span class="dot">•</span>
+    <span>commit <code>a2ad9f6</code></span><span class="dot">•</span>
+    <span>verl <code>0.9.0.dev</code> fork</span><span class="dot">•</span>
+    <span>5 environments</span><span class="dot">•</span>
+    <span>3,764 images</span>
+  </div>
+</header>
+
+<div class="toc">
+  <div class="lbl">Contents</div>
+  <ol>
+    <li><a href="#s1">What was actually released (and what wasn't)</a></li>
+    <li><a href="#s2">The provenance puzzle: whose code is this?</a></li>
+    <li><a href="#s3">The architecture in one picture</a></li>
+    <li><a href="#s4">GRPO, but engineered</a></li>
+    <li><a href="#s5">The Penalty Module: Eq.(4) and Eq.(5) in code</a></li>
+    <li><a href="#s6">Groupwise agentic grading: GRS and GAR</a></li>
+    <li><a href="#s7">Multi-harness training: four mini-harnesses</a></li>
+    <li><a href="#s8">Reward hacking: a three-layer defence</a></li>
+    <li><a href="#s9">RL infrastructure for 25K trajectories/step</a></li>
+    <li><a href="#s10">The task environments, up close</a></li>
+    <li><a href="#s11">The 3,764-image catalogue</a></li>
+    <li><a href="#s12">What the open stack deliberately omits</a></li>
+    <li><a href="#s13">Takeaways</a></li>
+  </ol>
+</div>
+
+<p class="lede">The MiMo-V2.6 technical report describes a large-scale agentic RL run: <strong>1,568 prompts × 16 rollouts = 25,000 trajectories per step</strong>, 2.7–3.7 billion tokens per batch, up to 1M-token contexts, across five task domains and eight agent harnesses. Reports like this usually stop at the equations. What makes this release unusual is that Xiaomi also published a <code>verl</code> fork that implements the recipe, plus the actual task environments as Docker images.</p>
+
+<p class="lede">So this is a reading exercise. For each claim in the report, I went looking for the code or the environment that makes it concrete — and where the code contradicts the report, I say so.</p>
+
+<h2 id="s1">1. What was actually released (and what wasn't)</h2>
+
+<p>Five artifacts, all public:</p>
+
+<table>
+  <thead><tr><th>Artifact</th><th>Location</th><th>Size / shape</th></tr></thead>
+  <tbody>
+    <tr><td>Technical report</td><td>44-page PDF, §7.2 open-source section</td><td>~133K chars extracted</td></tr>
+    <tr><td>RL training code</td><td><code>XiaomiMiMo/verl</code></td><td>735 <code>.py</code>, +326 in submodules</td></tr>
+    <tr><td>Training data</td><td><code>XiaomiMiMo/MiMo-V2.6-RL-oss</code></td><td>7,778 task rows across 5 parquets</td></tr>
+    <tr><td>Task environments</td><td><code>xiaomimimo/mimo-v2.6-rl-oss</code> (Docker Hub)</td><td>3,764 image tags</td></tr>
+    <tr><td>Starting model</td><td><code>MiMo-V2.6-Distill-Qwen-9B</code></td><td>distilled from Qwen3.5-9B</td></tr>
+  </tbody>
+</table>
+
+<p>The dataset splits, read directly from the parquet files:</p>
+
+<table>
+  <thead><tr><th>Parquet</th><th class="num">Rows</th><th><code>dataset_type</code></th><th>Verifier</th></tr></thead>
+  <tbody>
+    <tr><td><code>code.parquet</code></td><td class="num">2,698</td><td><code>opensource-code</code></td><td>Executable tests</td></tr>
+    <tr><td><code>cyber.parquet</code></td><td class="num">1,000</td><td><code>arvo</code></td><td>Rule checks (ASan/MSan/UBSan)</td></tr>
+    <tr><td><code>general-train.parquet</code></td><td class="num">989</td><td><code>general_agent</code> (925) + <code>terminal_bench</code> (64)</td><td>Rubric-based judging</td></tr>
+    <tr><td><code>webdev.parquet</code></td><td class="num">2,093</td><td>all <code>category=website</code></td><td>Visual grading</td></tr>
+    <tr><td><code>music.parquet</code></td><td class="num">1,000</td><td>zh 504 / en 496; short 504 / long 496</td><td>Rule checks (MIDI)</td></tr>
+  </tbody>
+</table>
+
+<p>That is 7,780 rows — just over the "approximately 7k tasks plus 1k music tasks" the report claims. The five domains also match the report's Table 4 SFT composition and Table 6 evaluation table exactly: Code, Cyber, General, Visual, Music.</p>
+
+<div class="note key">
+  <span class="lbl">The single most useful artifact</span>
+  <p><code>image-mapping.jsonl</code> — 3,764 lines, each mapping a dataset row's <code>dataset_image</code> to a Docker Hub tag:</p>
+  <pre><code>{"dataset_image": "arvo-rl:v1-arvo-10055",
+ "dockerhub_image": "docker.io/xiaomimimo/mimo-v2.6-rl-oss:arvo-v1-10055"}</code></pre>
+  <p>This file is the <strong>join key between the data and the environments</strong>. Without it, the dataset is a pile of JSON blobs with dangling image references. With it, every task can be reconstituted.</p>
+</div>
+
+<h2 id="s2">2. The provenance puzzle: whose code is this?</h2>
+
+<p>Before reading the algorithm, it's worth knowing what you're reading. The fork's <code>README.md</code> is refreshingly explicit:</p>
+
+<pre><code>This fork adds reproduction code for five RL environments upon
+[verl](https://github.com/verl-project/verl) (0.9.0.dev).</code></pre>
+
+<p>But that undersells it. Checking every penalty- and consistency-related file for its copyright header:</p>
+
+<table>
+  <thead><tr><th>File</th><th>Copyright</th><th>On upstream <code>verl</code> v0.9.0?</th></tr></thead>
+  <tbody>
+    <tr><td><code>verl/trainer/ppo/arvo_penalties.py</code></td><td>2025 ByteDance</td><td><strong>404 — fork-only</strong></td></tr>
+    <tr><td><code>verl/trainer/ppo/signed_rebalance.py</code></td><td>2026 ByteDance</td><td><strong>404 — fork-only</strong></td></tr>
+    <tr><td><code>verl/utils/length_penalty.py</code></td><td>2025 ByteDance</td><td><strong>404 — fork-only</strong></td></tr>
+    <tr><td><code>verl/trainer/ppo/rollout_corr_helper.py</code></td><td>2025 ByteDance</td><td>200 — upstream</td></tr>
+  </tbody>
+</table>
+
+<p>So the files carrying the report's §4.3.3 behavioural regularization are <em>not</em> in upstream <code>verl</code> — yet they carry ByteDance copyright. The natural reading: Xiaomi needed penalty machinery that matched their in-house RL system, wrote it against <code>verl</code>'s extension points, and left the copyright headers pointing at the library owners rather than rewriting them. The <code>recipes/</code> directory — the part that is unambiguously Xiaomi's — is where the glue lives.</p>
+
+<h3>The "reference RL framework"</h3>
+
+<p>Now the interesting part. Grep the code for how it refers to the system it is porting from:</p>
+
+<pre><code>$ grep -rn "reference RL framework" mimo-verl/verl/
+verl/trainer/config/algorithm.py:94
+verl/trainer/config/algorithm.py:114
+verl/trainer/config/algorithm.py:120
+verl/trainer/config/ppo_trainer.yaml:135
+verl/trainer/ppo/signed_rebalance.py:29
+verl/trainer/ppo/signed_rebalance.py:31
+verl/trainer/ppo/signed_rebalance.py:33
+verl/trainer/ppo/v1/trainer_base.py:262</code></pre>
+
+<p>Eight hits. A phrase used consistently, never defined, capitalised like a proper noun. The report itself <strong>never uses this phrase once</strong> (zero hits across all 133K characters). So the code is systematically anonymising a system the paper names outright.</p>
+
+<p>The report names it in §6.4:</p>
+
+<div class="note">
+  <span class="lbl">Report §6.4</span>
+  <p>"We extend the RL and OPD infrastructure of MiMo-V2-Flash, keeping <strong>SGLang</strong> and <strong>Megatron-LM</strong> as the inference and the training engine, respectively."</p>
+</div>
+
+<p>Combined with the concrete anchors in the comments — <code>SETUP_FAILED</code> as an error category, a <code>dirty_repetition</code> rule name, <code>invalid_reward_value: -999</code> — the "reference RL framework" is unambiguously <strong>MiMo's own internal SGLang + Megatron RL stack</strong>, the system that trained MiMo-V2-Flash and then Pro/Flash. The open-source <code>verl</code> fork is a <em>port</em> of that system's learning-signal design onto a public framework.</p>
+
+<div class="note warn">
+  <span class="lbl">Why this matters for reading the code</span>
+  <p>When a comment says "this replaced the reference RL framework's approach because…", it is describing a design decision made in a system you cannot see. The comment is the <em>only</em> surviving rationale. That makes these docstrings unusually high-value documentation — and also means you cannot independently verify them from the open code alone.</p>
+</div>
+
+<h2 id="s3">3. The architecture in one picture</h2>
+
+<p>The report frames RL scaling along three axes (§4), with compute proportions measured on the Pro run:</p>
+
+<table>
+  <thead><tr><th>Axis</th><th>Mechanism</th><th>Code / config anchor</th></tr></thead>
+  <tbody>
+    <tr><td><strong>1. Training compute</strong><br>43.8% rollout / 43.5% train / 12.7% grader</td><td>Large batch, async partial rollout at staleness 4, 2.7–3.7B tokens/step</td><td><code>train_batch_size</code>, <code>N=16</code>, <code>MAXLEN=262144</code></td></tr>
+    <tr><td><strong>2. Environment &amp; harness diversity</strong></td><td>5 domains × 4 mini-harnesses, mixed by step-hash</td><td><code>config/agent/code/mix-four-whitebox.yaml</code></td></tr>
+    <tr><td><strong>3. Grader compute</strong></td><td>Groupwise agentic grading — GRS (offline) + GAR (online)</td><td><code>recipes/design/grader_service/</code></td></tr>
+  </tbody>
+</table>
+
+<p>The execution model is <strong>agent-centric</strong>, not inference-centric (§6.1). Each sequence runs as an <em>Agent Loop</em> that owns the environment lifecycle and calls the inference engine on demand, exposing a request endpoint that the external agent drives. Dialogues are kept both as string prefixes and token sequences, so only new suffixes get tokenised. The trajectory data is a four-level hierarchy:</p>
+
+<pre><code>Sample  →  one prompt dispatched by the Sample Mixer (spawns a GRPO group)
+  └─ Sequence  →  one Agent Loop execution  ← the group is accept/reject as a whole
+       └─ Context   →  one dialogue branch (unit of prefix matching, KV reuse, export)
+            └─ Segment  →  one turn: system/user message, model generation, or tool result
+                           (only model-generated turns contribute to the loss)</code></pre>
+
+<p>This hierarchy is not cosmetic — it's what makes the Penalty Module able to target a decision at the right granularity. Hold that thought for §5.</p>
+
+<h2 id="s4">4. GRPO, but engineered</h2>
+
+<p>The objective is standard GRPO with token-level importance sampling, Eq.(1):</p>
+
+<div class="eq">
+J(θ) = E<sub>q~D, {o<sub>i</sub>}~μ<sub>θold</sub></sub> [ (1/Σ|o<sub>i</sub>|) Σ<sub>i</sub> Σ<sub>t</sub> r<sub>i,t</sub> M<sub>i,t</sub> A<sub>i</sub> log π<sub>θ</sub>(o<sub>i,t</sub> | q, o<sub>i,&lt;t</sub>) ]
+<span class="tag">(1)</span>
+</div>
+
+<p>What matters is how it's configured. From the released recipe, <code>recipes/code/config/train.yaml</code>:</p>
+
+<pre><code>actor:
+  use_rollout_log_probs: true        # keep rollout policy's logprobs (needed for IS)
+  clip_ratio: 0.2
+  clip_ratio_low: 0.2
+  clip_ratio_high: 0.2
+  clip_ratio_c: 3.0                  # dual-clip PPO lower bound
+  loss_agg_mode: prompt-mean         # ← averages at PROMPT level, not over tokens
+  entropy_coeff: 0
+  use_kl_loss: false
+  optim:
+    lr: 1e-6
+    lr_decay_style: constant
+
+algorithm:
+  adv_estimator: grpo
+  norm_adv_by_std_in_grpo: false     # ← no /std normalisation
+  use_kl_in_reward: false
+  filter_groups:
+    enable: true                     # drop all-pass / all-fail groups</code></pre>
+
+<h3>Four choices worth pausing on</h3>
+
+<p><strong><code>loss_agg_mode: prompt-mean</code></strong> — the report is explicit that this "averages the surrogate at the prompt level rather than over all response tokens". The consequence: a 50-turn trajectory does not get 50× the gradient weight of a 1-turn trajectory. Given that §5.5 documents trajectories hitting length limits as a primary failure mode, this is a direct countermeasure to length-driven gradient inflation.</p>
+
+<p><strong><code>norm_adv_by_std_in_grpo: false</code></strong> — the advantage is <code>R<sub>i</sub> − mean(R)</code>, not divided by the group standard deviation. On binary rewards this matters enormously: dividing by <code>std</code> of a nearly-degenerate group (e.g. 7 pass, 1 fail) produces a huge advantage for the single outlier. Skipping the division keeps the signal proportional to the actual reward gap. Note this is <em>load-bearing</em> — <code>arvo_penalties.py</code> raises <code>ValueError</code> if it is set otherwise (see §5).</p>
+
+<p><strong><code>clip_ratio_low == clip_ratio_high == 0.2</code></strong> — and here the code <em>contradicts</em> the report.</p>
+
+<div class="note warn">
+  <span class="lbl">Discrepancy: the decoupled clip bounds are not in the open stack</span>
+  <p>The report describes four decoupled clip boundaries with the upper bound allowed to move to <strong>5.0</strong>, adjusted dynamically by entropy. In the open-source recipe, <code>clip_ratio_low</code> and <code>clip_ratio_high</code> are both pinned at <code>0.2</code> — plain PPO. A repo-wide sweep of every <code>clip_ratio_high</code> declaration finds only two distinct values:</p>
+  <pre><code>0.2   — everywhere in the OSS recipe and verl defaults
+0.28  — third_party/uni_agent/.../claude_code_megatron_v1.yaml</code></pre>
+  <p>There is no entropy-driven clip schedule anywhere: searches for <code>dynamic_clip</code>, <code>clip_schedul</code>, <code>entropy_aware</code>, <code>clip_bound</code> all return zero hits. <strong>The dynamic clipping is part of the internal stack, not the released one.</strong></p>
+</div>
+
+<p><strong><code>filter_groups.enable: true</code></strong> — groups that are all-pass or all-fail are dropped. With binary test rewards, such groups have zero advantage variance and therefore produce zero gradient. The report cites this as the "dynamic sampler". Worth knowing the failure mode: dropping groups biases the reported post-filter pass-rate toward 0.5 (a known sampling-bias artefact documented in sibling frameworks).</p>
+
+<h3>Off-policy correction</h3>
+
+<p>Because the released recipe uses staleness-4 asynchronous rollouts, training happens on trajectories from older checkpoints. <code>recipes/code/config/train.yaml</code> enables the correction block:</p>
+
+<pre><code>rollout_correction:
+  bypass_mode: false</code></pre>
+
+<p>The machinery behind it lives in <code>verl/trainer/ppo/rollout_corr_helper.py</code>, which is <em>upstream verl</em> (not Xiaomi code). Its docstring states the problem well: it addresses "policy mismatch between rollout and training implementations (e.g., vLLM BFloat16 vs FSDP FP32)", "model update staleness", and general distribution shift. It offers token-level and sequence-level IS weights, plus rejection-sampling filters (<code>token_k1/2/3</code>, <code>seq_sum_k*</code>, <code>seq_mean_k*</code>, <code>seq_max_k*</code>), with log-space computation and a fixed <code>exp(±20)</code> safety bound to avoid overflow.</p>
+
+<p>The subtlety from §6.4 that <em>is</em> implemented in the fork: top-k and top-p sampling renormalise over a restricted candidate set, so training log-probabilities must be renormalised within that same set. <code>routed_experts</code> — the MoE expert indices per token — does flow through the fork's <code>verl/experimental/agent_loop/agent_loop.py</code>, and <code>verl/workers/engine/veomni/transformer_impl.py</code> has an explicit <code>REPLAY</code> mode that raises if <code>routed_experts</code> is missing rather than silently falling back. The Megatron engine reads it at <code>transformer_impl.py:1092</code>.</p>
+
+<div class="note">
+  <span class="lbl">Careful reading</span>
+  <p>The fork plumbs <code>routed_experts</code> end-to-end and has a strict replay path in the VeOmni engine. But there is also a <code>compute_moe_lb_metrics</code> consumer (<code>metric_utils.py:312</code>) that treats it as <em>load-balance telemetry</em>, gated behind <code>moe_lb_metrics_interval</code>. So the field serves two masters: routing replay for consistency, and MoE load-balance monitoring. Both are consistent with §5.4 and §6.4 — just don't assume the presence of the field proves replay is active in any given run.</p>
+</div>
+
+<h2 id="s5">5. The Penalty Module: Eq.(4) and Eq.(5) in code</h2>
+
+<p>This is the most rewarding part of the codebase to read, because report §4.3.3 states two equations and the code implements both with matching structure.</p>
+
+<h3>5.1 The design: detection separated from effect</h3>
+
+<p>From §6.1: "<em>we separate detection from its effect on training. A <strong>Rule</strong> judges a segment, context, or sequence… A <strong>Strategy</strong> binds an action to a level of the hierarchy</em>."</p>
+
+<p>The strategies are enumerated in <code>verl/trainer/config/algorithm.py</code>:</p>
+
+<pre><code>MARKED_TOKEN_PENALTY_STRATEGIES = frozenset({
+    "monitor",       # record metrics only, zero effect on training
+    "mask",          # exclude hit tokens from the loss
+    "adv_reduction", # subtract penalty_value from advantages after GRPO norm
+    "adv_set",       # replace their advantages with penalty_value
+    "adv_signed",    # sign-aware, mass-conserving (the interesting one)
+})</code></pre>
+
+<p>And the escalation ladder is documented: "a context with no surviving model turns is dropped, a sequence with no surviving context receives zero advantage, and a sample with no surviving sequence is rejected." That's the four-level trajectory hierarchy from §3 earning its keep.</p>
+
+<h3>5.2 Eq.(4): the group-relative length penalty</h3>
+
+<div class="eq">
+R̃<sub>i</sub> = R<sub>i</sub> − <b>1</b>[i ∈ P<sub>q</sub>] · X · [ clip( (ℓ<sub>i</sub>/ℓ*<sub>q</sub> − 1 − δ)/(s − δ), 0, 1 ) ]<sup>γ</sup>
+<span class="tag">(4)</span>
+</div>
+
+<p>Where ℓ*<sub>q</sub> is a quantile of the <em>successful</em> rollouts' lengths in the group, X is the max deduction, δ the tolerated excess, s the saturation point, γ ≥ 1 the ramp exponent. Now read <code>verl/utils/length_penalty.py</code>'s config docstring — every symbol has a named field:</p>
+
+<table>
+  <thead><tr><th>Paper symbol</th><th>Config field</th><th>OSS value</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>X</td><td><code>max_penalty</code></td><td><code>0.2</code></td><td>Upper bound subtracted from reward</td></tr>
+    <tr><td>δ</td><td><code>excess_threshold</code></td><td><code>0</code></td><td>Deadzone — already at anchor ⇒ penalised</td></tr>
+    <tr><td>s</td><td><code>excess_saturate</code></td><td><code>1</code></td><td>200% of anchor hits max penalty</td></tr>
+    <tr><td>γ</td><td><code>penalty_exponent</code></td><td><code>1.5</code></td><td>Convex ramp: <code>t**1.5</code></td></tr>
+    <tr><td>B</td><td><code>anchor_quantile</code></td><td><code>0.3</code></td><td>p30 of passed rollouts' lengths</td></tr>
+    <tr><td>A</td><td><code>min_pass_rate</code></td><td><code>0.5</code></td><td>Skip group unless pass-rate &gt; 0.5</td></tr>
+    <tr><td>—</td><td><code>metrics</code></td><td><code>["turns","input_tokens","output_tokens"]</code></td><td>Which length signals to compare</td></tr>
+    <tr><td>—</td><td><code>combine</code></td><td><code>"max"</code></td><td>Fold per-metric excess by worst dimension</td></tr>
+    <tr><td>—</td><td><code>pass_threshold</code></td><td><code>0.5</code></td><td>"Passed" = reward ≥ 0.5</td></tr>
+  </tbody>
+</table>
+
+<p>The docstring even explains <em>why</em> the quantile is low: "0.5 = median (default). Lower values (e.g. 0.25 = p25) compress harder." Choosing 0.3 means the anchor sits below the median of successful runs — deliberately aggressive compression of token growth.</p>
+
+<p>And it states the anchoring invariant that makes per-group computation safe: "<em>One call = one uid group. The accept boundary delivers exactly one full uid group, and both the anchor and the penalty are group-local, so per-group computation is equivalent to whole-batch computation.</em>"</p>
+
+<h3>5.3 Eq.(5): sign-aware, mass-conserving advantage rebalancing</h3>
+
+<p>Here's the code's own prose rendering of Eq.(5), from the <code>signed_rebalance.py</code> module docstring:</p>
+
+<div class="note">
+  <span class="lbl">signed_rebalance.py — module docstring</span>
+  <p>"The penalty a marked token receives depends on the sign of its OWNING SEQUENCE's outcome advantage:</p>
+  <ul>
+    <li>positive sample, marked token → advantage set to <strong>0</strong> (stop reinforcing the span)</li>
+    <li>negative sample, marked token → advantage <strong>*= kappa</strong> (kappa ≥ 1; punish the span harder)</li>
+  </ul>
+  <p>Each sign then conserves its total mass over the whole train batch: the mass removed from positive marked tokens is handed back to the clean tokens of positive samples by one factor <code>alpha ≥ 1</code> (clamped at <code>max_scale</code>); the mass added on negative marked tokens is taken back from the clean tokens of negative samples by one factor <code>beta ≤ 1</code> (clamped at <code>min_scale</code>)."</p>
+</div>
+
+<p>Compare to Eq.(5): α = min(α<sub>max</sub>, 1 + Σ<sub>H+</sub>A / Σ<sub>C+</sub>A) and β = max(β<sub>min</sub>, 1 − (κ−1)Σ<sub>H−</sub>|A| / Σ<sub>C−</sub>|A|). The code's <code>solve_signed_factors</code> computes exactly this — with the naming translated (<code>removed</code>↔Σ<sub>H+</sub>A, <code>pos_base</code>↔Σ<sub>C+</sub>A, <code>added</code>↔(κ−1)Σ<sub>H−</sub>|A|, <code>neg_base</code>↔Σ<sub>C−</sub>|A|) — and asserts conservation:</p>
+
+<pre><code>if not a_cl:
+    assert abs(pos_post - pos_pre) &lt;= 1e-6 * max(1.0, abs(pos_pre)), \
+        f"positive mass not conserved: {pos_pre} -&gt; {pos_post}"
+if not b_cl:
+    assert abs(neg_post - neg_pre) &lt;= 1e-6 * max(1.0, abs(neg_pre)), \
+        f"negative mass not conserved: {neg_pre} -&gt; {neg_post}"</code></pre>
+
+<p>The conservation claim in the report's last sentence ("Each sign's total advantage mass is conserved when neither scale is clipped") is enforced by a runtime assertion. When a scale <em>is</em> clamped, the code logs a warning rather than failing — precisely the report's caveat.</p>
+
+<div class="note key">
+  <span class="lbl">Why the earlier approach was abandoned</span>
+  <p>Same docstring, and this is the kind of detail you only get from the code:</p>
+  <p>"A whole-turn <code>adv_set -1</code> instead injects net negative mass into the batch, which with no KL / entropy bonus flattens the policy and lengthens outputs — the documented reason the reference RL framework replaced it with this."</p>
+  <p>So the naive penalty (set the bad turn's advantage to −1) is <strong>actively harmful</strong> when <code>use_kl_loss: false</code> and <code>entropy_coeff: 0</code> — both of which are the OSS recipe's settings. Negative mass with no counterweight drives entropy up and outputs longer. The mass-conserving formulation is the fix.</p>
+</div>
+
+<p>One extension beyond the internal system is noted honestly: an optional per-row <code>token_weights</code> so that "mass" means <em>gradient</em> mass under prompt-mean aggregation. "With unit weights the math is identical to the reference RL framework's."</p>
+
+<h3>5.4 The seven-item configuration contract</h3>
+
+<p><code>ReferencePenalties.for_training()</code> validates the entire training config before allowing penalties to be enabled. Any mismatch raises <code>ValueError</code>. From <code>recipes/arvo/REFERENCE_PENALTIES.json</code> and the validator:</p>
+
+<pre><code>{"selected_rules": ["tool_call_error", "length_penalty"],
+ "tool_call_error": {
+   "strategy": "adv_signed", "level": "segment",
+   "negative_multiplier": 2,          # kappa = 2
+   "signed_min_scale": 0.5,           # beta_min
+   "signed_max_scale": 2.0 },         # alpha_max
+ "length_penalty": {
+   "enabled": true, "max_penalty": 0.2, "excess_threshold": 0,
+   "excess_saturate": 1, "penalty_exponent": 1.5,
+   "metrics": ["turns", "input_tokens", "output_tokens"],
+   "combine": "max", "pass_threshold": 0.5,
+   "anchor_quantile": 0.3, "min_pass_rate": 0.5 },
+ "common_algorithm": {
+   "norm_adv_by_std_in_grpo": false,
+   "loss_agg_mode": "prompt-mean",
+   "use_kl_in_reward": false,
+   "use_kl_loss": false },
+ "excluded_reference_rules": ["tool_name_invalid", "toxic_reasoning",
+                              "overlong", "agent_context_filter"]}</code></pre>
+
+<p>The <code>for_training()</code> check is worth quoting because it reveals what the internal system demanded: <code>adv_estimator=grpo</code>, <code>norm_adv_by_std_in_grpo=False</code>, <code>use_kl_in_reward=False</code>, <code>filter_groups.enable=True</code>, <code>metric="reward"</code>, <code>use_kl_loss=False</code>, <code>loss_agg_mode="prompt-mean"</code>. These aren't suggestions — the reference recipe is <strong>hard-coded into the validator</strong>. You can't run the released penalties under a different aggregation scheme, which tells you the authors considered those seven settings part of the algorithm, not tunables.</p>
+
+<p>The <code>excluded_reference_rules</code> list is equally informative: <code>tool_name_invalid</code>, <code>toxic_reasoning</code>, <code>overlong</code>, <code>agent_context_filter</code> exist in the internal system but are explicitly <em>not</em> shipped. Selectively releasing rules is a deliberate choice.</p>
+
+<h2 id="s6">6. Groupwise agentic grading: GRS and GAR</h2>
+
+<p>This is the third scaling axis, and the report devotes 12.7% of compute to it. Two complementary methods on disjoint task subsets.</p>
+
+<h3>6.1 GRS — Groupwise Reward Synthesis (offline)</h3>
+
+<p>For high-pass-rate tasks, multiple offline rollouts are compared to construct task-specific rubrics, which are then reused to score future rollouts. The final reward is multiplicative, Eq.(2):</p>
+
+<div class="eq">
+R<sub>i</sub> = R<sup>test</sup><sub>i</sub> · S<sup>sol</sup><sub>i</sub> · S<sup>beh</sup><sub>i</sub>
+<span class="tag">(2)</span>
+</div>
+
+<p>Multiplicative rather than additive, deliberately: "This multiplicative form keeps rubric supervision tied to test outcomes. Failed trajectories retain zero reward, while passing trajectories are further distinguished by implementation quality and problem-solving behavior." When every rollout passes, the product of the two rubric scores still separates them — that's the learning signal binary rewards throw away.</p>
+
+<p>The report gives a qualitative justification for why this beats naive patch-size penalties: policies trained with online grading "produce smaller, more precise patches that remained within the requested scope", whereas workarounds such as "broad exports, exception swallowing, relaxed validation" aim to pass tests "but can exceed the scope of the task instructions".</p>
+
+<h3>6.2 GAR — Groupwise Advantage Redistribution (online)</h3>
+
+<div class="eq">
+λ = Σ<sub>j∈P</sub> A<sub>j</sub> / Σ<sub>j∈P</sub> f<sub>j</sub>A<sub>j</sub> ,&nbsp;&nbsp; A′<sub>i</sub> = λ f<sub>i</sub> A<sub>i</sub> &nbsp; if i ∈ P ,&nbsp;&nbsp; A<sub>i</sub> otherwise
+<span class="tag">(3)</span>
+</div>
+
+<p>An SFT-trained agentic grader sees all trajectories in a group within a shared workspace and ranks passing patches on five dimensions: suitability of approach, precision without omissions or unnecessary fallbacks, minimality, avoidance of unintended effects, and craftsmanship consistent with codebase conventions. Passing trajectories get quality factors f<sub>i</sub> ∈ (0,1]; a common factor redistributes the removed positive mass among them.</p>
+
+<p>The critical design detail, which the report explains and which is easy to miss: "Simply downweighting positive advantages leaves negative advantages unchanged; renormalization restores their balance as a safeguard against excessive entropy growth." So λ is not cosmetic — it preserves the total positive mass so the advantage distribution stays balanced against the negatives.</p>
+
+<p>Also: "When evidence confirms dependence on an external or leaked answer, we reset the trajectory's effective reward to zero and treat it as a failure <em>before recomputing group statistics</em>." The ordering matters — the hacked trajectory must not pollute the group mean.</p>
+
+<h3>6.3 The grader service, and why the visual one is fascinating</h3>
+
+<p><code>recipes/design/grader_service/src/design_grader/service/server.py</code> is 1,333 lines serving a single reward: the webdev <code>group_v1</code>. The most instructive file is <code>group_pick.py</code>, the visual groupwise ranking core:</p>
+
+<pre><code>raw    = pick_norm − query_deduct
+reward = (raw + 2) / 3          # ∈ [0.067, 1]</code></pre>
+
+<p>Ranking is done over <code>PICK_ROUNDS = 8</code> rounds of a <strong>Williams row-complete Latin square</strong>, so that every shot appears in every position exactly once and every ordered adjacency exactly once — "measured to flatten the first-position bias from ±0.28 to ±0.03 votes." Position bias in pairwise judging is a real, measurable problem; this is a clean fix.</p>
+
+<p>Noise suppression is layered: if fewer than <code>PICK_MIN_OK = 5</code> rounds are valid, the whole group's pick is zeroed; too many near-duplicate comparisons also zero the group; a net vote within a deadzone zeroes a single shot.</p>
+
+<div class="note key">
+  <span class="lbl">Why the affine remap exists</span>
+  <p>The code documents that <code>group_v1</code> used to be the only producer of rewards in [−2, 1]. Consequence: the trainer's pass-rate was <em>pinned to 0.5</em>, the reward histogram degenerated, and the value <code>0.0</code> became semantically ambiguous (was it "no signal" or "bad"?). Remapping to [0.067, 1] fixes all three.</p>
+  <p><strong>Lesson</strong>: if a single reward source can emit values on both sides of the pass threshold, you have accidentally built a reward that cannot express "clearly good".</p>
+</div>
+
+<p>There's also a <strong>hard runtime gate</strong> (<code>runtime_gate.py</code>): a page that fails <code>node --check</code> syntax validation, throws an uncaught page error, or hangs gets <code>runtime = 0.0</code> — not a soft multiplicative factor. The comment explains why zero and not, say, 0.5: "vis=1.0 × 0.5 still beats a clean vis=0.5 page", so any soft factor lets a broken page outscore an honest one. And the hang case is 0 rather than a drop, because dropping the sample masks it out of the advantage calculation — which would teach the model that freezing the renderer is <em>safe</em>. The comment calls this "the <code>while(1){}</code> incident".</p>
+
+<p>The driver side (<code>recipes/design/webdev/group_reward.py</code>) rewrites group rewards under four rules, and INVALID entries are replaced by the group's mean valid reward — because GRPO only ever looks at <code>reward − group_mean</code>, so setting an invalid sample to the mean makes it contribute exactly nothing.</p>
+
+<h2 id="s7">7. Multi-harness training: four mini-harnesses</h2>
+
+<p>Report §4.2.5 argues that training a single harness couples task-solving strategies to harness-specific implementation details. The natural fix — train on production harnesses like MiMo Code and Codex — is rejected for two reasons: production harnesses wrap the loop in engineering safeguards whose behaviour falls outside the reward signal ("making credit assignment unreliable and leaving reward-unmeasured requirements to simply be ignored"), and their modules are too tightly coupled to vary one mechanism in isolation.</p>
+
+<p>So they built <em>mini-harnesses</em> from a common minimal agent loop. In the released code, that is exactly four YAML files:</p>
+
+<div class="filepath">config/agent/code/mix-four-whitebox.yaml</div>
+<pre><code>harnesses:
+  - label: mini-mimocode
+    config: ./mini-mimocode.yaml
+  - label: mini-bash
+    config: ./mini-bash.yaml
+  - label: mini-claude-code
+    config: ./mini-claude-code.yaml
+  - label: mini-codex
+    config: ./mini-codex.yaml</code></pre>
+
+<p>Reading all four side by side shows the controlled-variation design clearly:</p>
+
+<table>
+  <thead><tr><th>Harness</th><th>Agent type</th><th>Tools</th><th>Protocol</th><th>System prompt</th></tr></thead>
+  <tbody>
+    <tr><td><code>mini-bash</code></td><td><code>bashonly-agent</code></td><td>bash only</td><td>chat</td><td>2 lines, minimal</td></tr>
+    <tr><td><code>mini-mimocode</code></td><td><code>mimocode-agent</code></td><td>bash, read, write, edit, grep, glob, <strong>task</strong></td><td>chat</td><td>none</td></tr>
+    <tr><td><code>mini-claude-code</code></td><td><code>cc-agent</code></td><td>Bash, Read, Write, Edit, Grep, Glob</td><td>chat</td><td>long, with anti-hack clause</td></tr>
+    <tr><td><code>mini-codex</code></td><td><code>codex-agent</code></td><td><code>exec_command</code>, <code>apply_patch</code></td><td><strong>responses</strong></td><td>none</td></tr>
+  </tbody>
+</table>
+
+<p>The variation axes are clean: number of tools (1 → 2 → 6 → 7), whether there's a <code>task</code> sub-agent, the wire protocol (chat vs responses), and prompt verbosity. Everything else is held constant — <code>cwd: /testbed</code>, <code>cpu_limit: 4</code>, <code>memory_limit: 8Gi</code>, <code>step_limit: 500</code>, <code>environment_class: kubernetes</code>, <code>anti_hack_cleanup: true</code>, <code>temperature: 1.0</code>.</p>
+
+<h3>The mixing rule</h3>
+
+<p>From <code>recipes/code/mimoagent_runner.py</code>, the step-hash scheduler:</p>
+
+<pre><code>digest = hashlib.sha256(
+    f"{seed}\0{int(harness_round)}\0{sample_key}".encode()
+).digest()
+index = int.from_bytes(digest[:8], "big")
+label, config_path = specs[index % len(specs)]</code></pre>
+
+<p>Crucially, <strong>a GRPO group stays on one arm</strong>, and the sample rotates across arms between steps. The env example states the consequence plainly: "With four harness arms and step-hash mixing, a group stays on one arm and the sample rotates across arms between steps, so N does not need to be a multiple of four."</p>
+
+<p>That's a real constraint, not a nicety. If a group's 16 rollouts were split across 4 harnesses, the group-relative advantage would be comparing scores from <em>different environments</em> — the baseline would be meaningless.</p>
+
+<p>On the seed, the env example is emphatic:</p>
+
+<div class="note">
+  <span class="lbl">scripts/code/env.example</span>
+  <p>"The seed decides which arm each sample routes to, so changing it changes the <em>experiment</em> rather than just the shuffle. This is the reference run's value." — <code>MIXED_HARNESS_SEED=20260911</code></p>
+</div>
+
+<p>And the docstring of <code>_select_config_path</code> explains why there's no single-harness branch: "<em>There is no single-harness branch: the launcher always enables mixing, and a one-armed run is a spec with one entry. Two code paths for one decision is how a run ends up training on a profile nobody chose.</em>"</p>
+
+<p>The reported result (Table 7) — mean across 7 harnesses on MiMo Code Bench (mini): Qwen3.5-9B 15.3 → Distill 53.1 → <strong>+ Multi-Harness RL 59.0</strong>, with gains on all 21 dataset–harness pairs including the three held-out harnesses (codex, claude code, mini-swe-agent).</p>
+
+<h3>A measured pathology, honestly documented</h3>
+
+<p>One of the best passages in the repo is <code>_cap_tool_calls</code> in <code>recipes/arvo/agent_loop.py</code>, describing a parser bug found during a real run:</p>
+
+<pre><code>On Qwen3.5-9B the `qwen3_coder` parser turns a batched multi-call turn
+into a long run of junk: one observed assistant turn parsed as 47 calls
+-- 3 real `read` calls followed by 44 named `command` with EMPTY
+arguments, i.e. `&lt;parameter=command&gt;` being read as
+`&lt;function=command&gt;`. Across 64 trajectories that made 76.6% of all
+tool calls nonexistent-tool calls (9659/12616), each answered with
+"Unknown tool", which the model retried until the 128K budget was gone
+(89.1% ended on budget exhaustion).
+
+Capping at 1 tests that story cheaply: if the junk rate collapses, the
+batch parse is the cause. It is NOT a fix -- it also drops legitimate
+parallel calls -- so the real repair is in the parser, for which
+_dump_raw_generation collects the evidence.</code></pre>
+
+<p>Two things to admire here. First, the number 76.6% is shockingly high — nearly four out of five tool calls were invalid. Second, the fix is correctly labelled as <em>not</em> a fix: it's a diagnostic lever, shipped off by default, with <code>_dump_raw_generation</code> added so the raw emitted XML (which the trajectory dump normally discards, since it keeps only the parser's output) is recoverable.</p>
+
+<h2 id="s8">8. Reward hacking: a three-layer defence</h2>
+
+<p>§4.2.6 opens with the failure mode precisely: for repository-repair tasks, "a recurring failure mode is <strong>solution leakage</strong>: agents obtain a published fix beyond the intended task context and use it to construct a patch." The report then tabulates five concrete patterns across real repos:</p>
+
+<table>
+  <thead><tr><th>Pattern</th><th>Example task</th><th>Observed action</th></tr></thead>
+  <tbody>
+    <tr><td>Install and read a newer release</td><td>pytest <code>conftest.py</code> paths</td><td><code>pip install pytest==5.4.3</code>; inspect source</td></tr>
+    <tr><td>Fetch upstream source</td><td>Astropy <code>TimeSeries</code></td><td><code>curl .../astropy/timeseries/core.py</code></td></tr>
+    <tr><td>Clone upstream</td><td>Matplotlib <code>ax.clear()</code></td><td><code>git clone .../matplotlib.git</code></td></tr>
+    <tr><td>Look up the solution</td><td>Django <code>MultiValueField</code></td><td>Read change history of ticket #29205</td></tr>
+    <tr><td>Probe versions</td><td>Sphinx return-type doc</td><td>Compare later releases for the fix</td></tr>
+  </tbody>
+</table>
+
+<p>The defence has three layers, and the code implements the third.</p>
+
+<p><strong>Layer 1 — mid-training alignment data.</strong> Cases were synthesised where "MiMo reflects on the faulty reasoning, revises the relevant turn, and continues with actions grounded in the task specification", with the revised reasoning keeping "the original error recognizable".</p>
+
+<p><strong>Layer 2 — environment preparation.</strong> Artefact/cache/git cleanup plus network isolation. This is what <code>anti_hack_cleanup: true</code> in every mini-harness config activates.</p>
+
+<p><strong>Layer 3 — adversarial screening and running audit.</strong> Two implementations:</p>
+
+<ul>
+  <li><em>Prompt-level</em>: <code>mini-claude-code.yaml</code> includes an explicit instruction that shortcuts "will be detected and scored zero", enumerating the exact vectors — don't fetch upstream, don't pip/npm install a newer release, don't overwrite test files, don't hard-code expected outputs.</li>
+  <li><em>Runtime interception</em>: <code>third_party/mimoagent-osr/src/mimoagent/agents/antihack.py</code> (343 lines) — an <code>AntiHackGuard</code> registered on the agent's action-interceptor chain, inspecting each tool call <em>before</em> execution and returning a dummy observation instead of blocking the rollout.</li>
+</ul>
+
+<p>The rationale for interception-over-termination is stated well: "the model just sees an unhelpful result, so the shortcut can't reach the answer and can't inflate the verifiable reward, and the trajectory is never abruptly terminated (which is what destabilizes training when whole rollouts are rejected)."</p>
+
+<p>Implementation details worth noting:</p>
+
+<ul>
+  <li><strong>Default OFF</strong>, and an absent config is "a strict no-op — <code>inspect</code> returns <code>None</code> for every action — so existing runs are byte-for-byte unaffected."</li>
+  <li><strong>Only stage 1 ships.</strong> The design follows a two-stage pattern (regex recall filter → LLM judge for precision), but stage 2 is a stub: "Until it is wired to a model endpoint, <code>confirm</code> conservatively upholds every regex hit."</li>
+  <li><strong>All three tool schemas are covered.</strong> The <code>_BASH_FIELDS</code> table maps exact tool-call names — <code>Bash</code>/<code>bash</code>/<code>exec_command</code>/<code>apply_patch</code> scan <code>command</code>/<code>cmd</code>/<code>input</code>/<code>patch</code> — across <code>tools/</code>, <code>tools/cc/</code>, and <code>tools/mimocode/</code>. The comment explains the necessity: scanning file tools "closes the non-Bash bypass where the model reads an eval artifact directly via Read/Grep/Glob instead of <code>cat</code>", and the lowercase rows exist because "mimocode reuses the lowercase ids of the original catalogue but takes cc's param name".</li>
+</ul>
+
+<p>Net effect: "the logged confirmed-hack share remains below <strong>2%</strong> throughout the whole training process for both Flash and Pro."</p>
+
+<h2 id="s9">9. RL infrastructure for 25K trajectories/step</h2>
+
+<p>§6 describes four subsystems. The engineering constraints are unusually explicit, which makes this section good reading even if you never run MoE RL.</p>
+
+<h3>Harness Pool — multi-tenant actors</h3>
+
+<p>The naive design costs "one file descriptor per actor on Ray's global control store (GCS) node, and a large batch would exhaust the GCS node's file descriptors." The fix: fixed-size pools of persistent host actors, each carrying many concurrent tenants, balanced by in-flight instance count. A host is one process whose tenants share one event loop, one request endpoint, one inference proxy, one tokenizer — and on the environment side, one imported harness codebase.</p>
+
+<p>The failure mode this creates and its mitigation: "A shared event loop would let one blocking call stall every tenant, so blocking work — environment operations and tokenization — runs on background threads."</p>
+
+<p>There's also a hard constraint tying back to §7: "One process can import only one harness codebase, so different codebases run in separate pools." Harness pools receive "configurable shares of a fixed budget of host actors — set once at startup, independent of the training-data mixture that is scheduled every step."</p>
+
+<h3>Payload Porter — disaggregated control/data plane</h3>
+
+<p>Each sequence is heavy: token ids, log-probabilities, MoE routing data, top-p sampling indices, and multimodal data. Gathering all of that on one driver node ties batch size to that node's memory. So each sequence is split at rollout finish: the payload is written once to a distributed KV store (Ray object store or TransferQueue), while the driver schedules on lightweight metadata only — scalar rewards, per-context lengths, and keys.</p>
+
+<p>"At group finish, only the fields needed are read from the store: a few columns for the accept-time hook." Then the hook imposes length penalties, computes group-relative advantages, and applies advantage shaping; per-token advantages are written back; groups with all-zero advantages are dropped.</p>
+
+<p>Packing is equally careful: "one packer per training tensor-parallel (TP) group serves every rank in the group. From the unpadded rows in the store, it fetches only those its context-parallel (CP) window touches and cuts out that window alone. The result is shared across the TP group as a single read-only in-memory copy." No full-batch aggregation on the driver, no dense padded intermediates.</p>
+
+<p>Multimodal adds a wrinkle: a single trajectory can accumulate gigabytes of screenshots. So during rollout the Agent Loop ships "only the multi-modal delta between requests", and for training, because the vision encoder is replicated across the TP group while the LLM backbone is sharded, "encoding runs data-parallel first — image items are balanced across ranks independently of where each sequence's tokens land" — then embeddings are redistributed to the ranks holding the corresponding tokens.</p>
+
+<h3>Sample Mixer — the discipline layer</h3>
+
+<p>The motivating numbers: across <strong>25 profiled data sources, mean generated tokens vary by 90× and active rollout duration by 66×</strong>. A naive scheduler will simply starve short tasks. Four mechanisms fill the specified training distribution:</p>
+
+<ol>
+  <li><strong>Adaptive Rollout Concurrency</strong> — per-source budgets</li>
+  <li><strong>Adaptive Rollout Scheduling</strong> — selects sources within budgets</li>
+  <li><strong>Predictive Rollout Dispatch</strong> — places new rollouts across ranks</li>
+  <li><strong>Sample Replay</strong> — covers startup and recovery</li>
+</ol>
+
+<p>The failure analysis in §5.5 shows how fragile the coupling is: "one harness later produced rollouts less than half as long as those from other harnesses on the same code dataset, skewing estimates in the second and third steps after restart", and biases at startup "exhausted both the GPU and pinned host-memory KV pools."</p>
+
+<h3>Training–inference consistency</h3>
+
+<p>Four mechanisms, and the detail that took me a moment to appreciate is the top-p bitmap:</p>
+
+<blockquote style="margin:0 0 22px;padding:12px 0 12px 20px;border-left:3px solid var(--line);color:var(--ink2);font-size:15.6px">
+"For top-p sampling, only the GPU–CPU transfer is dense: we ship a bitmap of fixed shape and full-vocabulary width. The fixed shape avoids a GPU–CPU synchronization; the full width never truncates even a set that spans the whole vocabulary. All later stages are sparse: at a typical top-p of 0.97, a candidate set averages fewer than five tokens."
+</blockquote>
+
+<p>A fixed-shape full-vocabulary bitmap costs transfer bandwidth but buys two things: no GPU→CPU sync (the shape is known statically) and no truncation edge case. At p=0.97 the set averages &lt;5 tokens, so the sparse downstream work is trivial. It's the right trade for a synchronisation-free async pipeline.</p>
+
+<p>Plus: QDQ (quantize–dequantize) applied to experts after every update so both engines see identical MXFP4 weights; R3 routing replay; context caching with a hierarchical extension that keeps state "in HBM during GPU time and in a pinned host pool during tool time", offload/restore on side CUDA streams "never stalling generation".</p>
+
+<h3>Router freezing — the most striking single result</h3>
+
+<p>§5.4 tracks three statistics at decoder layer 9 (384 experts) of MiMo-V2.6-Pro:</p>
+
+<table>
+  <thead><tr><th>Metric</th><th>Trainable router (steps 1→20)</th><th>Frozen router</th></tr></thead>
+  <tbody>
+    <tr><td>Coefficient of variation</td><td>0.78 → <strong>2.0</strong></td><td>≈ 0.7 (flat)</td></tr>
+    <tr><td>Peak load (max/mean)</td><td>6× → <strong>16×</strong></td><td>≈ 5.5× (flat)</td></tr>
+    <tr><td>Cold experts (&lt;0.1× mean)</td><td>0.5% → <strong>22%</strong></td><td>≈ 1% (flat)</td></tr>
+  </tbody>
+</table>
+
+<p>All three rise monotonically. The diagnostic is the elegant part: restoring <em>only</em> the router parameters to their pre-RL values recovers load balance "while benchmark performance remains unchanged" — proving the collapse is router drift, not degradation of the expert weights. So the router is frozen for RL, and "benchmark performance growing normally" confirms nothing was lost.</p>
+
+<div class="note key">
+  <span class="lbl">Note the label</span>
+  <p>The report calls this "a severe load-collapse problem" and resolves it by freezing. But in the same paper, GRS/GAR and the penalty module exist partly to <em>shape</em> learning during RL. Freezing the router is the one place where the answer is to stop a component from learning at all. Twenty-two percent of experts going cold is not a subtle drift — it's a structural collapse of the model's capacity allocation.</p>
+</div>
+
+<p>Also worth noting for anyone thinking about stability: §5.5's failure timeline lists GPU memory double-bit errors, a Kubernetes failure crashing Cyber-task pods between steps 15 and 16, and the grader becoming unreachable after step 14. Training also used a gradient clipping threshold of 1.0, and initialized RL by carrying over FP32 master weights and Muown's row state from the SFT checkpoint.</p>
+
+<h2 id="s10">10. The task environments, up close</h2>
+
+<p>This is where the release is most valuable and least documented. The dataset gives you a Docker image name per task; the Docker Hub repo gives you the image. Let me walk the four environment designs, because they're genuinely different solutions to genuinely different problems.</p>
+
+<h3>Code — 2,698 tasks, one image each</h3>
+
+<p>Reading <code>code.parquet</code>, each row's <code>extra_info.instance_json</code> contains:</p>
+
+<pre><code>{"cwd": "/testbed",
+ "dataset_type": "opensource-code",
+ "docker_image": "format-code-task-000001:latest",
+ "instance_id": "...",
+ "problem_statement": "...",
+ "test_command": "bash /testbed/mimo_test_command.sh",
+ "test_patch": "...",              # present in 100% of rows
+ "verifier_timeout_sec": 1800}</code></pre>
+
+<p>The design is recognisably SWE-bench-lineage: a repo checked out at a historical commit, a bug report as the prompt, a test patch applied at verification time, and the test command as the oracle. Two details stand out. <code>test_patch</code> is present on every single row — so the verifier always has an authoritative definition of correctness. And the timeout is 1,800 s (30 minutes) per task.</p>
+
+<p>Note that <code>data_source=opensource-code</code> and <code>ability=swe</code>, and the harness is <code>mimo_swe_agent</code>. The dataset is stored with the task as an <em>embedded JSON string</em> in <code>extra_info.instance_json</code> rather than as nested struct columns — the dataset loader's comment explains this avoids Arrow struct-union corruption when rows have heterogeneous fields.</p>
+
+<h3>Cyber — 1,000 tasks, 1,000 distinct images</h3>
+
+<p>Every row is <code>dataset_type=arvo</code> with a unique image (<code>arvo-rl:v1-arvo-10055</code>, etc.). The verifier design is the interesting part, from §4.2:</p>
+
+<blockquote style="margin:0 0 22px;padding:12px 0 12px 20px;border-left:3px solid var(--line);color:var(--ink2);font-size:15.6px">
+"We instead extract two attributes from the ground-truth sanitizer (ASan/MSan/UBSan) report: the vulnerability type (e.g., heap-buffer-overflow) and the crash location (the topmost project-level stack frame). A PoC is accepted iff its crash matches both under rule-based string matching, which is deterministic, reproducible, and computationally trivial."
+</blockquote>
+
+<p>The report is precise about why the two obvious alternatives fail. Fix-binary differential testing (as in CyberGym) "accepts a PoC that crashes the vulnerable binary but not the patched one; an incomplete patch rejects correct PoCs, and unrelated changes between the two commits flip verdicts for reasons unconnected to the bug — <strong>either error corrupts the training gradient</strong>." LLM-based judging "returns different verdicts for the same PoC across runs and cannot serve as a stable reward."</p>
+
+<p>And the key property: the task description is derived from the <em>same</em> sanitizer report, "stating the exact type and function in which the crash must occur, so description and verification share a single source of truth." That's why a deterministic string match is sufficient — description and oracle can't diverge.</p>
+
+<p>The environment also gives agents more than CyberGym does: the full compiled fuzzing harness binary, not just source, because "providing it mirrors real vulnerability analysis, where a researcher runs the target under a debugger, inspects memory, and crafts mutations from runtime observations."</p>
+
+<p>The ARO RLO config reflects the task's cost: <code>max_exec_budget: 1200</code>, <code>step_limit: 300</code>, <code>pod_timeout: 5h</code> — and notably <code>anti_hack_cleanup: false</code>, because vulnerability reproduction legitimately needs the runtime environment intact.</p>
+
+<h3>General — knowledge work with a multi-container, MCP-driven environment</h3>
+
+<p>This is the most architecturally ambitious of the four, and reading one real task makes the design click. The sample I pulled (<code>general-sample/</code>) is a commercial-real-estate closing review, and its <code>manifest.json</code> specifies:</p>
+
+<pre><code>{"cwd": "/work/workspace",
+ "uploads": [ ...6 entries, split across main and sidecar containers... ],
+ "setup": {"command": "python3 /installed-agent/sidecar_entrypoint.py --start-and-detach",
+           "container": "sidecar", "timeout_sec": 300},
+ "wait_ports": [39101, 39102, 39103, 39104],
+ "mcp_servers": [
+   {"name": "dealcloud_disposition_workspace",      "url": "http://127.0.0.1:39101/mcp"},
+   {"name": "kpmg_tax_modeling_hub",                "url": "http://127.0.0.1:39102/mcp"},
+   {"name": "sharepoint_tax_governance_library",    "url": "http://127.0.0.1:39103/mcp"},
+   {"name": "yardi_property_asset_register",        "url": "http://127.0.0.1:39104/mcp"}],
+ "verifier": {"command": "python3 /work/run_verify.py",
+              "reward_file": "/logs/verifier/reward.json"}}</code></pre>
+
+<p>So a "general" task is: a <strong>sidecar container</strong> hosting four <strong>MCP servers</strong> on four ports, a shared workspace, and an agent that must query and reason across all four systems. The domain is simulated commercial real estate — DealCloud deal pipeline, KPMG tax modelling, SharePoint governance, Yardi asset register. That's not a toy; that's a miniature enterprise.</p>
+
+<p>The verifier is the part that shows real craft. <code>verifier_meta.json</code> defines six rubric items, four of them <code>critical</code>:</p>
+
+<table>
+  <thead><tr><th>ID</th><th>Tier</th><th>Weight</th></tr></thead>
+  <tbody>
+    <tr><td><code>current_recommended_structure</code></td><td>critical</td><td>0.20</td></tr>
+    <tr><td><code>documentary_tax_components</code></td><td>critical</td><td>0.20</td></tr>
+    <tr><td><code>protection_statuses</code></td><td>critical</td><td>0.25</td></tr>
+    <tr><td><code>controlled_payment_split_and_fallback</code></td><td>critical</td><td>0.20</td></tr>
+    <tr><td><code>readiness_conclusion</code></td><td>important</td><td>0.15</td></tr>
+    <tr><td><code>source_data_present</code></td><td>sanity</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<p>Each LLM-judged item ships a <code>pass_anchor</code> containing the actual expected numbers, which is what makes it gradeable rather than vibes:</p>
+
+<pre><code>"Los Angeles County documentary-transfer-tax component = $9,141.00;
+ City of Los Angeles component = $37,395.00;
+ approved documentary-transfer-tax summary = $46,536.00."
+
+"proceed with a negotiated installment asset sale using a
+ $7,183,750.00 closing principal payment
+ and a $21,551,250.00 secured seller note."</code></pre>
+
+<p>And here's the genuinely clever bit — the task is built around <strong>designed distractors</strong>. The anchor text explicitly warns which nearby numbers are traps:</p>
+
+<pre><code>"The answer must use these installment values, not the $13,200.00 county,
+ $54,000.00 city, or $67,200.00 summary belonging to the active
+ direct-sale comparison, and not the inactive legacy county amount."
+
+"the partnership-interest transfer is not prioritized. The answer must
+ tie the open protections to this controlled recommendation rather than
+ treating the DealCloud comparison row's different $8,310,000.00 /
+ $6,000,000.00 figures as the approved split."</code></pre>
+
+<p>The task contains a <em>superseded</em> transaction, an <em>active but only-a-fallback</em> comparison, a completed requirement row attached to the wrong (superseded) transaction, and a required diligence item with no active row at all. A model that pattern-matches "find the number" fails; a model that tracks transaction identity, status, and supersession across four systems succeeds. There's a <code>check_code</code> using <code>sqlite3</code> that asserts specific database states — e.g. that <code>DC-TXN-25Q3-024</code> is <code>installment_sale/recommended</code> and that <code>DEC-2025-017</code> is <code>approved/INSTALLMENT_ASSET_SALE</code>.</p>
+
+<p>The reward pipeline is minimal and sane: <code>run_verify.py</code> extracts the <em>last</em> assistant message from the session jsonl, builds post-state by reading each MCP's <code>state.db</code>, calls <code>verify.py</code>, writes <code>reward.json</code>. <code>VERIFY_DETERMINISTIC=1</code> is the default, described as "Use verify()'s own weighted score (single source of truth)".</p>
+
+<div class="note warn">
+  <span class="lbl">An oddity in the shipped data</span>
+  <p>Of the 989 general rows, 925 share a <em>single</em> image (<code>general-agent-env-0:oss</code>) while the remaining 64 (the <code>terminal_bench</code> subset) get 65 dedicated images (<code>general-agent-env-1</code> … <code>-65</code>).</p>
+  <p>I inspected <code>general-agent-env-1</code> byte-for-byte (all 8 layers, sha256 verified, 292.5 MB). Its Dockerfile is <code>FROM python:3.12-slim-bookworm</code>, installs a shared <code>requirements-shared.txt</code>, then <code>COPY . /app</code>. The <code>requirements-shared.txt</code> carries a Chinese comment identifying it as "shared pip dependencies for the 65 terminal_bench candidate images", and the Dockerfile comment says "self-contained terminal_bench candidate image; the build context is this directory." The application layer is small: <code>workflow_probe.py</code> is a stdlib-only static fix detector that checks whether specific strings (e.g. <code>self.temp_output = set()</code>) are still present.</p>
+  <p>So the 65 <code>terminal_bench</code> images bake the task state into the image, while the 925 <code>general_agent</code> tasks share one base image and receive their task via the sidecar/MCP manifest plus uploads. <strong>That's an inference from the data, not something the code states outright</strong> — the split makes sense (generated tasks need per-task state, benchmark tasks need per-task repos) but I could not find the line of code that draws the boundary. Flagging it as an open question rather than asserting it.</p>
+</div>
+
+<h3>Visual — 2,093 tasks, one 2.63 GB single-layer image</h3>
+
+<p>All 2,093 rows are <code>category=website</code> and share one image, <code>webdev-rl-opensource:v2</code> — whose manifest is a single layer of 2,629.7 MB. Every task is a website brief, and the deliverable location is pinned in the harness config's system prompt: <code>{{cwd}}/dist/index.html</code>. Verification is the groupwise visual grader from §6.3.</p>
+
+<p>Compare the three image shapes side by side, because the layer counts tell a story about how each domain's dependency weight is distributed:</p>
+
+<table>
+  <thead><tr><th>Image</th><th class="num">Size</th><th class="num">Layers</th><th>Interpretation</th></tr></thead>
+  <tbody>
+    <tr><td><code>general-agent-env-1</code></td><td class="num">292.5 MB</td><td class="num">8</td><td>Thin base + shared pip layer + app layer; well-factored</td></tr>
+    <tr><td><code>arvo-v1-42525170</code></td><td class="num">603.1 MB</td><td class="num">39</td><td>Incremental build layers from compiling the fuzzing harness</td></tr>
+    <tr><td><code>webdev-rl-opensource:v2</code></td><td class="num">2,629.7 MB</td><td class="num">1</td><td>Flattened/squashed — a pre-baked toolchain snapshot</td></tr>
+  </tbody>
+</table>
+
+<p>The single-layer webdev image is the giveaway: someone took a heavy Node/browser toolchain image and squashed it, so task startup pulls one blob instead of crawling dozens of layers. For a domain where thousands of pods spin up per step, that's the right optimisation.</p>
+
+<h3>Music — pure standard library</h3>
+
+<p><code>recipes/design/music/scorer/core.py</code> does MIDI parsing and acoustic/tonal/rhythmic/structural metric computation with nothing but the standard library. No image per task, no external scorer. It's a nice contrast to the webdev path and suggests music was treated as the "cheap and deterministic" end of the environment spectrum. The report notes the internal music benchmark score going 45.7 (SFT) → 52.5 (RL).</p>
+
+<h2 id="s11">11. The 3,764-image catalogue</h2>
+
+<p>Version tags on Docker Hub: <strong>3,764</strong>. Lines in <code>image-mapping.jsonl</code>: <strong>3,764</strong>. Not a coincidence — and the composition explains the dataset shape exactly:</p>
+
+<table>
+  <thead><tr><th>Image family</th><th>Domain</th><th class="num">Count</th></tr></thead>
+  <tbody>
+    <tr><td><code>format-code-task-*</code></td><td>Code (SWE)</td><td class="num">2,698</td></tr>
+    <tr><td><code>arvo-rl:v1-arvo-*</code></td><td>Cyber</td><td class="num">1,000</td></tr>
+    <tr><td><code>general-agent-env-*</code></td><td>General</td><td class="num">65</td></tr>
+    <tr><td><code>webdev-rl-opensource:v2</code></td><td>Visual</td><td class="num">1</td></tr>
+    <tr><td colspan="2"><strong>Total</strong></td><td class="num"><strong>3,764</strong></td></tr>
+  </tbody>
+</table>
+
+<p>Cross-check against the parquet row counts: code 2,698 ↔ 2,698 images, cyber 1,000 ↔ 1,000 images. Exact. Visual: 2,093 rows ↔ 1 image. General: 989 rows ↔ 65 images. Music contributes no image at all — it uses neither submodule, a point its own README makes explicit.</p>
+
+<p>So the "3,764 images" headline is really "one image per Code task, one per Cyber task, one per terminal_bench task, plus one shared webdev image". Once you see that, the infrastructure cost is legible: a Code RL run needs to pull and run thousands of distinct images concurrently, which is exactly why the Harness Pool uses Kubernetes with per-pod limits (<code>cpu_limit: 4</code>, <code>memory_limit: 8Gi</code>) and why the env example notes that <code>MAX_CONCURRENT_SESSIONS</code> "is bounded by cluster quota rather than by GPU memory."</p>
+
+<p>This mapping is also the practical key to using the release. To reproduce a Code task you need: the parquet row (for <code>problem_statement</code>, <code>test_patch</code>, <code>test_command</code>), the mapped image tag (for the environment), and the harness config (for the agent loop). Three pieces, all public, joined by <code>image-mapping.jsonl</code>.</p>
+
+<h2 id="s12">12. What the open stack deliberately omits</h2>
+
+<p>A release of this kind is defined as much by what's held back. Being precise about the boundary is the difference between "reproducible" and "looks reproducible".</p>
+
+<h3>Absent: the groupwise grading algorithms</h3>
+
+<pre><code>$ grep -rn "GAR\|GRS" --include=*.py --include=*.md recipes/
+(no output)</code></pre>
+
+<p><strong>Zero hits.</strong> The report's §4.3 core contribution — Groupwise Reward Synthesis and Groupwise Advantage Redistribution — does not appear by name anywhere in the released recipe code. What <em>is</em> released:</p>
+
+<ul>
+  <li>The <strong>grader service</strong> for one reward (<code>group_v1</code> for webdev work, in <code>recipes/design/grader_service/</code>), complete with the Latin-square ranking and runtime gate</li>
+  <li>The <strong>driver-side group reward rewrite</strong> for webdev (<code>group_reward.py</code>, four rewrite rules)</li>
+  <li>The <strong>penalty module</strong> implementing §4.3.3 (Eq. 4 and 5)</li>
+</ul>
+
+<p>What is not released: the rubric-generation pipeline that produces GRS solution/behaviour rubrics from offline rollouts, and the online grader that produces GAR's quality factors f<sub>i</sub> over five ranking dimensions. The webdev grader is a domain-specific instance of the pattern, not the general machinery.</p>
+
+<h3>Absent: the dynamic clip schedule</h3>
+
+<p>As established in §4: <code>clip_ratio_high</code> never exceeds 0.28 anywhere in the repo, and no entropy-driven scheduling code exists. The paper's four decoupled bounds with an upper limit at 5.0 are internal-stack-only.</p>
+
+<h3>Absent: the production run's hyperparameters</h3>
+
+<p>The report gives Pro's settings — lr 3×10⁻⁶, staleness 4, Muown with 10 Newton–Schulz iterations. The OSS recipe gives lr 1×10⁻⁶ and <code>total_training_steps: 200</code> on a 9B distilled model. These are not the same run and the README doesn't pretend otherwise.</p>
+
+<h3>Present but narrower than the paper suggests</h3>
+
+<table>
+  <thead><tr><th>Report describes</th><th>OSS ships</th></tr></thead>
+  <tbody>
+    <tr><td>Four training + three held-out harnesses</td><td>Four mini-harness configs (the held-out ones aren't needed for training)</td></tr>
+    <tr><td>Anti-hack: mid-training data + environment prep + adversarial screening + audit</td><td><code>anti_hack_cleanup</code> flag + regex guard (default OFF), stage-1 only, stage-2 an LLM-judge stub</td></tr>
+    <tr><td>Penalty rules incl. <code>tool_name_invalid</code>, <code>toxic_reasoning</code>, <code>overlong</code>, <code>agent_context_filter</code></td><td>Two rules shipped; four listed as <code>excluded_reference_rules</code></td></tr>
+    <tr><td>GRS + GAR across all code agent tasks</td><td>Webdev groupwise grader + driver rewrite; code recipe uses plain test rewards</td></tr>
+  </tbody>
+</table>
+
+<div class="note good">
+  <span class="lbl">What this boundary buys you</span>
+  <p>The five-environment GRPO recipe is genuinely end-to-end runnable: launch scripts, env examples, dataset loaders, harness configs, and Docker images all line up with matching row and tag counts. The groupwise grading — arguably the most novel part of the paper — is demonstrated rather than shipped in general form. Read the report for the algorithm; read the repo for the engineering.</p>
+</div>
+
+<h2 id="s13">13. Takeaways</h2>
+
+<p>Six things I'd carry forward from this codebase, whether or not you ever train an agentic RL model.</p>
+
+<h4>1. Separate detection from effect.</h4>
+<p>The Rule/Strategy split — a rule judges a segment, a strategy binds <code>monitor</code>/<code>mask</code>/<code>adv_reduction</code>/<code>adv_set</code>/<code>adv_signed</code> to a hierarchy level — is a genuinely good pattern. It lets you deploy a new detector in <code>monitor</code> mode, watch its metrics for a few thousand steps, and only then give it teeth. Most training systems conflate "I noticed this" with "I penalised this", and can never turn a detector on safely.</p>
+
+<h4>2. Mass conservation is a numerical requirement, not an aesthetic one.</h4>
+<p>The code's own account of why naive penalty-setting was abandoned is the most valuable sentence in the repo: setting a bad turn's advantage to −1 "injects net negative mass into the batch, which with no KL / entropy bonus flattens the policy and lengthens outputs." With <code>use_kl_loss: false</code> and <code>entropy_coeff: 0</code> — the released defaults — there is nothing to counteract injected negative mass. The conservation assertion at the end of <code>signed_rebalance</code> encodes this as a testable invariant rather than a comment.</p>
+
+<h4>3. Make the invalid path loud.</h4>
+<p>Infrastructure failures get the sentinel <code>INVALID_REWARD_VALUE = -999.0</code>, not 0. The comment: "infra failures are visibly invalid, not silently a model failure." Compare the alternative — a dead pod scoring 0 — which teaches the model that some tasks are simply unlearnable. A -999 sentinel is detectable in metrics and excludable from advantage estimation. Most of the value is in the labelling, not the training.</p>
+
+<h4>4. Group-boundary discipline protects the baseline.</h4>
+<p>One GRPO group stays on one harness. A group is accepted or rejected as a whole. The anchor for the length penalty is computed within the group. Penalties escalate along the hierarchy — context dropped, then sequence zeroed, then sample rejected. In group-relative methods, the <em>group is the unit of statistical validity</em>, and every one of these rules is protecting that. Break any of them and the baseline stops meaning anything — which is exactly why the A/B test in Figure 8 shows GAR sustaining pass-rate gains to step 52 while the no-GAR run's gains stall as turns and tokens balloon.</p>
+
+<h4>5. Design the discriminator, not just the reward.</h4>
+<p>The general-domain tasks' <code>pass_anchor</code> fields are the clearest artefact of this discipline. They don't just state the right answer; they enumerate the adjacent wrong answers and explain why each is wrong — a superseded transaction, a fallback comparison row, a completion record attached to the wrong entity. That turns an LLM judge from a fuzzy similarity check into a discriminator with a known false-positive surface. Any eval or reward that relies on an LLM grader should carry one.</p>
+
+<h4>6. Anonymisation in comments destroys verifiability.</h4>
+<p>The "reference RL framework" phrase appears eight times and is never defined. The rationale it carries is genuinely useful — but it describes a system that isn't public, so none of it can be checked. This is a small, fixable thing: a one-line note in <code>NOTICE</code> mapping the phrase to "MiMo's internal SGLang+Megatron RL stack (report §6.4)" would cost the authors nothing and make a full class of comments verifiable. Worth remembering next time you're tempted to genericise a proper noun in a commit message.</p>
+
+<div class="note key">
+  <span class="lbl">The through-line</span>
+  <p>Reading this stack end to end, the coherent thesis is that <strong>agentic RL's bottleneck is the learning signal, not the optimizer</strong>. Every notable mechanism in the release attacks signal quality rather than optimisation: GRS/GAR extract quality distinctions binary tests erase; the Penalty Module puts credit on the right tokens instead of spreading outcome reward evenly over thousands of them; the four mini-harnesses prevent strategies from overfitting to one agent loop; multi-harness mixing teaches transfer; the anti-hack layers stop the signal from being gamed. The optimizer — GRPO, prompt-mean, no std normalisation — is deliberately vanilla.</p>
+  <p>And the one component they chose to <em>stop</em> learning — the MoE router — did so because its learning was damaging the model's capacity, not because the optimizer was struggling. Which is the same thesis from the other direction.</p>
+</div>
+
+<hr>
+
+<footer>
+  <p><strong>Sources.</strong> MiMo-V2.6 technical report (44 pp.). <code>github.com/XiaomiMiMo/verl</code> @ <code>a2ad9f6</code> (verl <code>0.9.0.dev</code> fork, submodules <code>mimoagent-osr</code> + <code>uni_agent</code> at <code>--depth 1</code>). Dataset <code>XiaomiMiMo/MiMo-V2.6-RL-oss</code> (5 parquets, 7,780 rows; <code>image-mapping.jsonl</code> 3,764 lines; one full <code>general_agent</code> environment sample). Docker Hub <code>xiaomimimo/mimo-v2.6-rl-oss</code> (3,764 tags; <code>general-agent-env-1</code> all 8 blobs sha256-verified; manifest/config for <code>arvo-v1-42525170</code> and <code>webdev-rl-opensource:v2</code>).</p>
+  <p><strong>Method.</strong> Every claim above is traced to a file path, line range, config value, parquet field, image tag, or report section. Three findings contradict or bound the report and are marked as such: the clip-bound discrepancy (§4), the GAR/GRS zero-hit result (§12), and the general-domain image-injection split (§10), which is inferred from the data rather than confirmed in code. Upstream-file checks were performed against <code>verl-project/verl</code> at tag <code>v0.9.0</code> and on <code>main</code>.</p>
+  <p><strong>Correction policy.</strong> If you spot an error in the mapping between an equation and its implementation, the code is the authority, and I'd want to know.</p>
+</footer>
+
+</div>
+</body>
+</html>

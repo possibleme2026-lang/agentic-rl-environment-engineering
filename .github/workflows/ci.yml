@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  claims:
+    name: claims (links + ledger + blog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check repository claims
+        run: python tools/check_claims.py
+
+  gate-self-test:
+    name: gate self-test (negative cases)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: python -m pip install --upgrade pip pytest
+
+      # A gate that only ever passes proves nothing. This asserts that
+      # check_claims.py actually fails on each deliberate defect.
+      - name: Run gate self-test
+        run: python -m pytest tools/test_check_claims.py -q
+
+  json:
+    name: evidence (JSON well-formed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate offsets.json parses
+        run: python -c "import json,pathlib; json.loads(pathlib.Path('evidence/offsets.json').read_text(encoding='utf-8')); print('offsets.json OK')"
+
+  blog:
+    name: blog (self-contained)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert no external resource tags in the post
+        run: |
+          set -eu
+          f=blog/mimo-v2.6-rl.html
+          test -f "$f"
+          if grep -qE '<script[^>]+src=|<link[^>]+stylesheet' "$f"; then
+            echo "::error::$f references an external resource; the post must render offline"
+            exit 1
+          fi
+          if grep -qE 'https?://cdn\.|https?://unpkg\.com|https?://cdn\.jsdelivr\.net' "$f"; then
+            echo "::error::$f references a CDN; the post must render offline"
+            exit 1
+          fi
+          echo "self-contained OK"

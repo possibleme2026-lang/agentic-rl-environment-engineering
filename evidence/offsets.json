@@ -1,0 +1,172 @@
+{
+  "_comment": "Machine-readable ledger of the counts this repository cites. tools/check_claims.py validates it for internal consistency and against the prose in README.md and blog/mimo-v2.6-rl.html. Values were read from the released dataset and the Docker Hub tag listing; see evidence/VERIFICATION.md for the commands.",
+
+  "source": {
+    "code_repo": "https://github.com/XiaomiMiMo/verl",
+    "code_commit": "a2ad9f6",
+    "dataset": "XiaomiMiMo/MiMo-V2.6-RL-oss",
+    "dockerhub": "xiaomimimo/mimo-v2.6-rl-oss",
+    "report": "MiMo-V2.6: Scaling Reinforcement Learning Towards Self-Improvement"
+  },
+
+  "parquet_rows": {
+    "code": 2698,
+    "cyber": 1000,
+    "general": 989,
+    "webdev": 2093,
+    "music": 1000,
+    "total": 7780
+  },
+
+  "parquet_breakdown": {
+    "general_agent": 925,
+    "terminal_bench": 64,
+    "music_zh": 504,
+    "music_en": 496,
+    "music_short": 504,
+    "music_long": 496
+  },
+
+  "image_mapping_total": 3764,
+  "dockerhub_tag_count": 3764,
+
+  "image_families": [
+    {
+      "family": "format-code-task-*",
+      "domain": "code",
+      "count": 2698,
+      "sharing": "one image per task"
+    },
+    {
+      "family": "arvo-rl:v1-arvo-*",
+      "domain": "cyber",
+      "count": 1000,
+      "sharing": "one image per task"
+    },
+    {
+      "family": "general-agent-env-*",
+      "domain": "general",
+      "count": 65,
+      "sharing": "64 terminal_bench tasks get one each; 925 general_agent tasks share general-agent-env-0"
+    },
+    {
+      "family": "webdev-rl-opensource:v2",
+      "domain": "visual",
+      "count": 1,
+      "sharing": "all 2093 tasks share a single image"
+    }
+  ],
+
+  "code_cyber_ledger": {
+    "_comment": "The two domains where images and tasks correspond exactly. check_claims.py asserts these hold in both directions.",
+    "code_rows": 2698,
+    "code_images": 2698,
+    "cyber_rows": 1000,
+    "cyber_images": 1000
+  },
+
+  "image_shapes": [
+    { "image": "general-agent-env-1", "size_mb": 292.5, "layers": 8, "sha256_all_verified": true },
+    { "image": "arvo-v1-42525170", "size_mb": 603.1, "layers": 39, "sha256_all_verified": false },
+    { "image": "webdev-rl-opensource:v2", "size_mb": 2629.7, "layers": 1, "sha256_all_verified": false }
+  ],
+
+  "upstream_presence": {
+    "_comment": "HTTP status from api.github.com for verl-project/verl at ref v0.9.0. 404 means the path does not exist upstream, i.e. the file is specific to the XiaomiMiMo fork. Copyright headers on all four read 'ByteDance Ltd. and/or its affiliates' locally.",
+    "verl/trainer/ppo/arvo_penalties.py": 404,
+    "verl/trainer/ppo/signed_rebalance.py": 404,
+    "verl/utils/length_penalty.py": 404,
+    "verl/trainer/ppo/rollout_corr_helper.py": 200
+  },
+
+  "anonymisation": {
+    "_comment": "The fork's comments refer to an unnamed 'reference RL framework'. The report never uses this phrase. Report section 6.4 names the system instead.",
+    "fork_occurrences_of_phrase": 8,
+    "report_occurrences_of_phrase": 0,
+    "report_names_instead": "MiMo-V2-Flash RL and OPD infrastructure, with SGLang (inference) and Megatron-LM (training)"
+  },
+
+  "absences": {
+    "_comment": "Claims the report makes that the open-source stack does not implement. Stated plainly in the blog so the boundary is explicit rather than implied.",
+    "clip_ratio_high_values_present": [0.2, 0.28],
+    "clip_ratio_high_max_in_report": 5.0,
+    "dynamic_clip_schedule_search_hits": 0,
+    "gar_grs_grep_hits_in_recipes": 0,
+    "excluded_reference_rules": [
+      "tool_name_invalid",
+      "toxic_reasoning",
+      "overlong",
+      "agent_context_filter"
+    ]
+  },
+
+  "penalty_config": {
+    "_comment": "recipes/arvo/REFERENCE_PENALTIES.json, the paper's section 4.3.3 settings.",
+    "selected_rules": ["tool_call_error", "length_penalty"],
+    "length_penalty": {
+      "max_penalty_X": 0.2,
+      "excess_threshold_delta": 0,
+      "excess_saturate_s": 1,
+      "penalty_exponent_gamma": 1.5,
+      "anchor_quantile_B": 0.3,
+      "min_pass_rate_A": 0.5,
+      "combine": "max",
+      "pass_threshold": 0.5
+    },
+    "tool_call_error": {
+      "strategy": "adv_signed",
+      "level": "segment",
+      "negative_multiplier_kappa": 2,
+      "signed_min_scale": 0.5,
+      "signed_max_scale": 2.0
+    },
+    "frozen_config_requirements": {
+      "algorithm.adv_estimator": "grpo",
+      "algorithm.norm_adv_by_std_in_grpo": false,
+      "algorithm.use_kl_in_reward": false,
+      "algorithm.filter_groups.enable": true,
+      "algorithm.filter_groups.metric": "reward",
+      "actor_rollout_ref.actor.use_kl_loss": false,
+      "actor_rollout_ref.actor.loss_agg_mode": "prompt-mean"
+    }
+  },
+
+  "router_freeze": {
+    "_comment": "Report section 5.4, MiMo-V2.6-Pro, decoder layer 9, 384 experts. Loads normalised per step.",
+    "cv_trainable": [0.78, 2.0],
+    "cv_frozen_approx": 0.7,
+    "peak_load_trainable": [6.0, 16.0],
+    "peak_load_frozen_approx": 5.5,
+    "cold_expert_pct_trainable": [0.5, 22.0],
+    "cold_expert_pct_frozen_approx": 1.0
+  },
+
+  "multi_harness": {
+    "_comment": "config/agent/code/mix-four-whitebox.yaml plus the per-arm configs in config/agent/code/.",
+    "arms": ["mini-mimocode", "mini-bash", "mini-claude-code", "mini-codex"],
+    "mixing_mode": "step-hash",
+    "mixing_seed": 20260911,
+    "group_binding": "one GRPO group stays on one arm; samples rotate across arms between steps",
+    "held_out_in_report": ["codex", "claude code", "mini-swe-agent"]
+  },
+
+  "environment_injected": {
+    "_comment": "Recipe for reproducing the two external clones the evidence refers to.",
+    "verl": {
+      "url": "https://github.com/XiaomiMiMo/verl.git",
+      "commit": "a2ad9f6",
+      "submodules": ["third_party/mimoagent-osr", "third_party/uni_agent"]
+    },
+    "dataset": {
+      "repo_id": "XiaomiMiMo/MiMo-V2.6-RL-oss",
+      "files": [
+        "code.parquet",
+        "cyber.parquet",
+        "general-train.parquet",
+        "webdev.parquet",
+        "music.parquet",
+        "image-mapping.jsonl"
+      ]
+    }
+  }
+}
