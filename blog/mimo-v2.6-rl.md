@@ -758,7 +758,7 @@ The report gives Pro's settings — lr 3×10⁻⁶, staleness 4, Muown with 10 N
 
 ## 13. Takeaways
 
-Six things I'd carry forward from this codebase, whether or not you ever train an agentic RL model.
+Five things I'd carry forward from this codebase, whether or not you ever train an agentic RL model.
 
 #### 1. Separate detection from effect.
 
@@ -779,10 +779,6 @@ One GRPO group stays on one harness. A group is accepted or rejected as a whole.
 #### 5. Design the discriminator, not just the reward.
 
 The general-domain tasks' `pass_anchor` fields are the clearest artefact of this discipline. They don't just state the right answer; they enumerate the adjacent wrong answers and explain why each is wrong — a superseded transaction, a fallback comparison row, a completion record attached to the wrong entity. That turns an LLM judge from a fuzzy similarity check into a discriminator with a known false-positive surface. Any eval or reward that relies on an LLM grader should carry one.
-
-#### 6. Anonymisation in comments destroys verifiability.
-
-The "reference RL framework" phrase appears eight times and is never defined. The rationale it carries is genuinely useful — but it describes a system that isn't public, so none of it can be checked. This is a small, fixable thing: a one-line note in `NOTICE` mapping the phrase to "MiMo's internal SGLang+Megatron RL stack (report §6.4)" would cost the authors nothing and make a full class of comments verifiable. Worth remembering next time you're tempted to genericise a proper noun in a commit message.
 
 > **The through-line**
 >
