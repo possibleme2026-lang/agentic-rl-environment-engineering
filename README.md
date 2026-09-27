@@ -10,10 +10,10 @@ English | [简体中文](README.zh-CN.md)
 
 | | Instalment | What it is |
 |---|---|---|
-| **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** | The field guide. Environment engineering drawn from ~80 papers: the five tests a training-grade environment must pass, why difficulty had to become a measurement, why your judge may be the weakest link, and why a benchmark rots the moment you publish it. |
-| **Part 2** | **[How Xiaomi Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** | The ground survey. The MiMo-V2.6 open stack read down to the config values — report equations traced to the code that implements them, and three claims the released code does not implement at all. |
+| **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** · [Markdown](blog/environment-engineering.md) | The field guide. Environment engineering drawn from ~80 papers: the five tests a training-grade environment must pass, why difficulty had to become a measurement, why your judge may be the weakest link, and why a benchmark rots the moment you publish it. |
+| **Part 2** | **[How Xiaomi Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | The ground survey. The MiMo-V2.6 open stack read down to the config values — report equations traced to the code that implements them, and three claims the released code does not implement at all. |
 
-Both are self-contained HTML: no build step, no network, no dependencies.
+Both are self-contained HTML: no build step, no network, no dependencies. Each instalment also ships as **Markdown** (linked above) for plain-text reading, diffing, and offline copies; a gate asserts the two representations stay in step.
 
 ---
 
@@ -67,11 +67,17 @@ snapshot_download('XiaomiMiMo/MiMo-V2.6-RL-oss', local_dir='mimo-oss-data')
 # 3. Re-run the machine-independent checks in this repo
 python tools/check_claims.py
 python -m pytest tools/test_check_claims.py -q
+
+# 4. Regenerate the Markdown twins (needs beautifulsoup4)
+pip install beautifulsoup4
+python tools/html_to_markdown.py
 ```
 
-`tools/check_claims.py` is a standard-library-only gate. It verifies that the README's relative links resolve, that [`evidence/offsets.json`](evidence/offsets.json) is internally consistent (family counts sum to the total, code/cyber images equal task counts, shared-image domains really do share), that every served page contains no external resource tags so it stays viewable offline, and that the series is navigable — each instalment links the other and the landing page reaches both, so a rename cannot silently strand a reader.
+`tools/check_claims.py` is a standard-library-only gate. It verifies that the README's relative links resolve, that [`evidence/offsets.json`](evidence/offsets.json) is internally consistent (family counts sum to the total, code/cyber images equal task counts, shared-image domains really do share), that every served page contains no external resource tags so it stays viewable offline, that the series is navigable — each instalment links the other and the landing page reaches both, so a rename cannot silently strand a reader — and that each HTML post and its Markdown twin still describe the same document.
 
-`tools/test_check_claims.py` is what makes that gate trustworthy. It builds throwaway repositories, injects one deliberate defect into each, and asserts the gate fails — **21 mutations, all detected**. Without it, a gate that silently stopped checking anything would look exactly like a gate that works.
+`tools/html_to_markdown.py` does that conversion and checks its own work: it counts code blocks, tables and table rows in the source DOM, counts them again in the Markdown it produced, and exits non-zero if any listing or row failed to survive. Two of Part 2's code listings live inside callout boxes, and a converter that flattens a callout into one string silently destroys their fences — which is exactly the failure the ledger catches.
+
+`tools/test_check_claims.py` is what makes that gate trustworthy. It builds throwaway repositories, injects one deliberate defect into each, and asserts the gate fails — **26 mutations, all detected**. Without it, a gate that silently stopped checking anything would look exactly like a gate that works.
 
 ### Docker images
 
@@ -90,11 +96,15 @@ curl -sL -H "Authorization: Bearer $TOKEN" \
 ```
 index.html                          landing page (GitHub Pages root) — the series entry point
 blog/environment-engineering.html    Part 1 — the field guide (~80 papers)
+blog/environment-engineering.md      Part 1 as Markdown (generated, gate-checked)
 blog/mimo-v2.6-rl.html               Part 2 — the MiMo-V2.6 ground survey
+blog/mimo-v2.6-rl.md                 Part 2 as Markdown (generated, gate-checked)
 evidence/VERIFICATION.md             raw commands and output for every claim
 evidence/offsets.json                machine-readable count ledger, checked in CI
-tools/check_claims.py                stdlib-only gate over links, ledger, series navigation, page self-containment
+tools/html_to_markdown.py            HTML -> Markdown converter with a self-checking ledger
+tools/check_claims.py                stdlib-only gate over links, ledger, series navigation, page self-containment, markdown parity
 tools/test_check_claims.py           negative tests proving the gate fails on each defect
+tools/verify_rendered.py             headless-browser check that the navigation actually renders
 ```
 
 ## Scope and limits

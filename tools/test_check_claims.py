@@ -56,10 +56,38 @@ MINIMAL_PART1 = """<html><head><style>body{}</style></head>
 <body><p>self-contained</p><a href="mimo-v2.6-rl.html">part 2</a></body></html>
 """
 
+# The Markdown twins must mirror the HTML's headings, fences and tables. Each
+# fixture below is the valid twin of the HTML above: one h1, one h2, one fenced
+# block, one two-column table with one body row.
+MINIMAL_MD = """# Title
+
+## Section
+
+```bash
+echo hi
+```
+
+| a | b |
+|---|---|
+| 1 | 2 |
+"""
+
 MINIMAL_INDEX = """<html><head><style>body{}</style></head>
 <body>
 <a href="blog/mimo-v2.6-rl.html">post</a>
 <a href="blog/environment-engineering.html">part 1</a>
+</body></html>
+"""
+
+# HTML twins matching MINIMAL_MD, used only for the parity checks.
+MINIMAL_HTML_POST = """<html><head><style>body{}</style></head>
+<body>
+<header class="hero"><h1>Title</h1></header>
+<h2>Section</h2>
+<pre><code>echo hi</code></pre>
+<table><thead><tr><th>a</th><th>b</th></tr></thead>
+<tbody><tr><td>1</td><td>2</td></tr></tbody></table>
+<a href="PLACEHOLDER">other</a>
 </body></html>
 """
 
@@ -76,10 +104,15 @@ def build_fixture(dest: Path) -> None:
     (dest / "index.html").write_text(MINIMAL_INDEX, encoding="utf-8")
     (dest / ".nojekyll").write_text("", encoding="utf-8")
     (dest / "LICENSE").write_text("Apache License\n", encoding="utf-8")
-    (dest / "blog" / "mimo-v2.6-rl.html").write_text(MINIMAL_BLOG, encoding="utf-8")
-    (dest / "blog" / "environment-engineering.html").write_text(
-        MINIMAL_PART1, encoding="utf-8"
+    (dest / "blog" / "mimo-v2.6-rl.html").write_text(
+        MINIMAL_HTML_POST.replace("PLACEHOLDER", "environment-engineering.html"),
+        encoding="utf-8",
     )
+    (dest / "blog" / "mimo-v2.6-rl.md").write_text(MINIMAL_MD, encoding="utf-8")
+    (dest / "blog" / "environment-engineering.html").write_text(
+        MINIMAL_HTML_POST.replace("PLACEHOLDER", "mimo-v2.6-rl.html"), encoding="utf-8"
+    )
+    (dest / "blog" / "environment-engineering.md").write_text(MINIMAL_MD, encoding="utf-8")
     (dest / "evidence" / "VERIFICATION.md").write_text("# Evidence\n", encoding="utf-8")
     (dest / "evidence" / "offsets.json").write_text(
         json.dumps(MINIMAL_OFFSETS, indent=2), encoding="utf-8"
@@ -308,6 +341,57 @@ def test_detects_external_asset_in_part1(repo: Path) -> None:
     result = run_gate(repo)
     assert result.returncode == 1
     assert "blog/environment-engineering.html: references" in result.stdout
+
+
+def test_detects_missing_markdown_twin(repo: Path) -> None:
+    (repo / "blog" / "mimo-v2.6-rl.md").unlink()
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "missing required file: blog/mimo-v2.6-rl.md" in result.stdout
+
+
+def test_detects_stale_markdown_section(repo: Path) -> None:
+    """The HTML gains a section but the Markdown was never regenerated."""
+    html = repo / "blog" / "mimo-v2.6-rl.html"
+    html.write_text(
+        html.read_text(encoding="utf-8").replace(
+            "<h2>Section</h2>", "<h2>Section</h2><h2>Added Later</h2>"
+        ),
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "regenerate with tools/html_to_markdown.py" in result.stdout
+
+
+def test_detects_markdown_missing_a_code_block(repo: Path) -> None:
+    """A dropped listing must be caught: the Markdown still reads as complete."""
+    md = repo / "blog" / "mimo-v2.6-rl.md"
+    md.write_text(md.read_text(encoding="utf-8").replace("```bash\necho hi\n```\n", ""),
+                  encoding="utf-8")
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "fenced blocks" in result.stdout
+
+
+def test_detects_markdown_missing_a_table_row(repo: Path) -> None:
+    md = repo / "blog" / "mimo-v2.6-rl.md"
+    md.write_text(md.read_text(encoding="utf-8").replace("| 1 | 2 |\n", ""), encoding="utf-8")
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "table lines" in result.stdout
+
+
+def test_detects_presentation_leaking_into_markdown(repo: Path) -> None:
+    """A bad conversion that leaves styling behind is still invalid Markdown."""
+    md = repo / "blog" / "mimo-v2.6-rl.md"
+    md.write_text(
+        md.read_text(encoding="utf-8") + '\n<div class="note">residue</div>\n',
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "presentation leaked" in result.stdout
 
 
 def test_detects_missing_nojekyll(repo: Path) -> None:

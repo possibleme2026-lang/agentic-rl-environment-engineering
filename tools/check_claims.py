@@ -38,7 +38,9 @@ REQUIRED = (
     "index.html",
     ".nojekyll",
     "blog/environment-engineering.html",
+    "blog/environment-engineering.md",
     "blog/mimo-v2.6-rl.html",
+    "blog/mimo-v2.6-rl.md",
     "evidence/VERIFICATION.md",
     "evidence/offsets.json",
     "tools/check_claims.py",
@@ -53,6 +55,17 @@ SELF_CONTAINED = (
     "index.html",
     "blog/environment-engineering.html",
     "blog/mimo-v2.6-rl.html",
+)
+
+# Each post exists twice: as the HTML that renders on Pages, and as Markdown for
+# readers who want plain text, diffs, or an offline copy. Two representations of
+# one document drift silently, so the pairs are checked for structural parity.
+#
+# ``toc_heading`` is the label of an <h2> that carries no content (the sidebar
+# "Contents" nav), which the converter drops on purpose.
+POST_PAIRS = (
+    ("blog/environment-engineering.html", "blog/environment-engineering.md", "Contents"),
+    ("blog/mimo-v2.6-rl.html", "blog/mimo-v2.6-rl.md", None),
 )
 
 # The series is only navigable if each instalment links the other and the
@@ -279,6 +292,102 @@ def check_readme_markers() -> None:
         fail("README.md: does not link the blog post")
 
 
+def check_markdown_parity() -> None:
+    """Each post's HTML and Markdown must describe the same document.
+
+    The Markdown is generated from the HTML by ``tools/html_to_markdown.py``, and
+    nothing forces a regeneration when the HTML changes. A stale pair still looks
+    like a complete post in both formats, so the counts are compared directly:
+    section headings, display equations, and table rows must line up. Fenced code
+    blocks are counted from the HTML source too, because the converter turns both
+    ``<pre>`` listings and ``.eq`` equations into fences.
+    """
+    global checks
+    for html_rel, md_rel, toc_heading in POST_PAIRS:
+        html_path = root() / html_rel
+        md_path = root() / md_rel
+        if not html_path.is_file() or not md_path.is_file():
+            continue  # already reported by check_required_files
+
+        html_text = html_path.read_text(encoding="utf-8")
+        md_text = md_path.read_text(encoding="utf-8")
+
+        # 1. Section headings: every <h2> except a pure-nav one must appear as "##".
+        html_h2 = re.findall(r"<h2[^>]*>(.*?)</h2>", html_text, flags=re.S)
+        html_h2 = [re.sub(r"<[^>]+>", "", h).strip() for h in html_h2]
+        if toc_heading:
+            html_h2 = [h for h in html_h2 if h != toc_heading]
+        html_sections = len(html_h2)
+        md_sections = len(re.findall(r"^## ", md_text, flags=re.M))
+        checks += 1
+        if html_sections != md_sections:
+            fail(
+                f"{md_rel}: has {md_sections} sections but {html_rel} has "
+                f"{html_sections}; regenerate with tools/html_to_markdown.py"
+            )
+
+        # 2. Fenced blocks: <pre> listings plus .eq equations become fences.
+        html_pre = len(re.findall(r"<pre[^>]*>", html_text))
+        html_eq = len(re.findall(r'class="eq"', html_text))
+        expected_fences = html_pre + html_eq
+        # Fences inside a blockquote are written "> ```", so strip quote markers.
+        md_fences = sum(
+            1
+            for line in md_text.splitlines()
+            if re.sub(r"^(\s*>\s*)+", "", line).lstrip().startswith("```")
+        ) // 2
+        checks += 1
+        if md_fences != expected_fences:
+            fail(
+                f"{md_rel}: has {md_fences} fenced blocks but {html_rel} has "
+                f"{expected_fences} ({html_pre} listings + {html_eq} equations); "
+                "regenerate with tools/html_to_markdown.py"
+            )
+
+        # 3. Table rows: one Markdown row per <tr>, plus a separator per table,
+        #    plus a synthetic blank header for each source table that had none
+        #    (GFM requires a header row, and Part 1's paper-index tables are
+        #    tbody-only). Counting by classification rather than by one pattern,
+        #    because ``|  |  |  |`` is pipes and spaces and matches a naive
+        #    separator test -- that mistake reports 8 phantom lost rows.
+        html_rows = len(re.findall(r"<tr[^>]*>", html_text))
+        html_tables = len(re.findall(r"<table[^>]*>", html_text))
+        html_thead = len(re.findall(r"<thead[^>]*>", html_text))
+        html_headerless = max(html_tables - html_thead, 0)
+        sep_re = re.compile(r"^\|[\s|:\-]*-[\s|:\-]*\|$")
+        md_table_lines = 0
+        md_separators = 0
+        for line in md_text.splitlines():
+            stripped = re.sub(r"^(\s*>\s*)+", "", line).lstrip()
+            if stripped.startswith("|"):
+                md_table_lines += 1
+                if sep_re.match(stripped):
+                    md_separators += 1
+        expected_lines = html_rows + html_tables + html_headerless
+        checks += 1
+        if md_table_lines != expected_lines:
+            fail(
+                f"{md_rel}: has {md_table_lines} table lines but {html_rel} implies "
+                f"{expected_lines} ({html_rows} rows + {html_tables} separators + "
+                f"{html_headerless} synthetic headers); regenerate with "
+                "tools/html_to_markdown.py"
+            )
+
+        # 4. Presentation must not survive into the Markdown.
+        checks += 1
+        for leak in ("<style", "@media", "box-sizing", "<div"):
+            if leak in md_text:
+                fail(f"{md_rel}: presentation leaked into the Markdown ({leak!r})")
+
+        # 5. Every table in the source must have produced a Markdown table.
+        checks += 1
+        if html_tables and md_separators != html_tables:
+            fail(
+                f"{md_rel}: {html_tables} tables in {html_rel} but {md_separators} "
+                "Markdown separators; regenerate with tools/html_to_markdown.py"
+            )
+
+
 def main() -> int:
     check_required_files()
     check_relative_links()
@@ -286,6 +395,7 @@ def main() -> int:
     check_blog_selfcontained()
     check_pages_entry()
     check_series_links()
+    check_markdown_parity()
     check_readme_markers()
 
     if failures:

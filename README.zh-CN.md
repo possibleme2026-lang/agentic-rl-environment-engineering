@@ -10,10 +10,10 @@
 
 | | 篇目 | 内容 |
 |---|---|---|
-| **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** | 领域指南。从约 80 篇论文中提炼的 environment engineering：训练级环境必须通过的五个检验、为什么「难」必须从形容词变成测量值、为什么你的 judge 可能是最弱一环、以及为什么 benchmark 一发布就开始腐烂。 |
-| **Part 2** | **[How Xiaomi Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** | 实地勘察。把 MiMo-V2.6 开源栈一路读到配置值 —— 报告的公式逐项对应到实现它的代码，并明确指出三处论文有、开源代码没有的东西。 |
+| **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** · [Markdown](blog/environment-engineering.md) | 领域指南。从约 80 篇论文中提炼的 environment engineering：训练级环境必须通过的五个检验、为什么「难」必须从形容词变成测量值、为什么你的 judge 可能是最弱一环、以及为什么 benchmark 一发布就开始腐烂。 |
+| **Part 2** | **[How Xiaomi Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | 实地勘察。把 MiMo-V2.6 开源栈一路读到配置值 —— 报告的公式逐项对应到实现它的代码，并明确指出三处论文有、开源代码没有的东西。 |
 
-两篇都是自包含 HTML：无需构建、无需联网、零依赖。
+两篇都是自包含 HTML：无需构建、无需联网、零依赖。每篇同时提供 **Markdown** 版本（见上），便于纯文本阅读、diff 与离线保存；守卫会断言两种表示始终一致。
 
 ---
 
@@ -67,11 +67,17 @@ snapshot_download('XiaomiMiMo/MiMo-V2.6-RL-oss', local_dir='mimo-oss-data')
 # 3. 重跑本仓库的机器无关检查
 python tools/check_claims.py
 python -m pytest tools/test_check_claims.py -q
+
+# 4. 重新生成 Markdown 伴生文件（需要 beautifulsoup4）
+pip install beautifulsoup4
+python tools/html_to_markdown.py
 ```
 
-`tools/check_claims.py` 是纯标准库的守卫。它校验 README 的相对链接是否落地、[`evidence/offsets.json`](evidence/offsets.json) 内部是否自洽（各族计数之和等于总数、code/cyber 镜像数等于任务数、共享镜像的域确实在共享）、每个对外页面是否不含外部资源标签从而能离线打开，以及 series 是否可导航 —— 两篇必须互链、落地页必须同时指向两篇，这样一次改名就不会把读者悄悄留在死路上。
+`tools/check_claims.py` 是纯标准库的守卫。它校验 README 的相对链接是否落地、[`evidence/offsets.json`](evidence/offsets.json) 内部是否自洽（各族计数之和等于总数、code/cyber 镜像数等于任务数、共享镜像的域确实在共享）、每个对外页面是否不含外部资源标签从而能离线打开、series 是否可导航（两篇必须互链、落地页必须同时指向两篇，一次改名就不会把读者悄悄留在死路上），以及每篇 HTML 与它的 Markdown 伴生文件是否仍描述同一份文档。
 
-`tools/test_check_claims.py` 才是让这个守卫可信的东西。它会构造临时仓库、向每个副本注入一处具体缺陷、断言守卫必须失败 —— **21 个突变全部被抓**。没有它，一个悄悄停止检查任何东西的守卫，看起来和一个正常工作的守卫一模一样。
+`tools/html_to_markdown.py` 负责这个转换，并且**自己核对账目**：先在源 DOM 里数代码块、表格与表格行，再在生成的 Markdown 里数一遍，只要有清单或行丢失就以非零退出。Part 2 有两个代码清单位于提示框内部，而把提示框压成一行字符串的转换器会静默毁掉它们的围栏 —— 这正是台账能抓住的失败模式。
+
+`tools/test_check_claims.py` 才是让这个守卫可信的东西。它会构造临时仓库、向每个副本注入一处具体缺陷、断言守卫必须失败 —— **26 个突变全部被抓**。没有它，一个悄悄停止检查任何东西的守卫，看起来和一个正常工作的守卫一模一样。
 
 ### Docker 镜像
 
@@ -90,11 +96,15 @@ curl -sL -H "Authorization: Bearer $TOKEN" \
 ```
 index.html                          落地页（GitHub Pages 根）—— 两部曲入口
 blog/environment-engineering.html   Part 1 —— 领域指南（约 80 篇文献）
+blog/environment-engineering.md     Part 1 的 Markdown 版（生成物，受守卫校验）
 blog/mimo-v2.6-rl.html              Part 2 —— MiMo-V2.6 实地勘察
+blog/mimo-v2.6-rl.md                Part 2 的 Markdown 版（生成物，受守卫校验）
 evidence/VERIFICATION.md            每条论断的原始命令与输出
 evidence/offsets.json               机器可读的计数台账，CI 中校验
-tools/check_claims.py               纯标准库守卫：链接、台账、series 导航、页面自包含性
+tools/html_to_markdown.py           HTML → Markdown 转换器，带自检台账
+tools/check_claims.py               纯标准库守卫：链接、台账、series 导航、页面自包含性、Markdown 一致性
 tools/test_check_claims.py          负向测试，证明守卫在每个缺陷上都会失败
+tools/verify_rendered.py            用 headless 浏览器断言导航真的渲染出来
 ```
 
 ## 范围与限制

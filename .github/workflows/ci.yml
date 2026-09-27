@@ -54,6 +54,33 @@ jobs:
       - name: Validate offsets.json parses
         run: python -c "import json,pathlib; json.loads(pathlib.Path('evidence/offsets.json').read_text(encoding='utf-8')); print('offsets.json OK')"
 
+  markdown:
+    name: markdown (twin matches its HTML)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install conversion dependencies
+        run: python -m pip install --upgrade pip beautifulsoup4
+
+      # The Markdown is generated from the HTML and nothing forces a
+      # regeneration when the HTML changes. Running the converter asserts its
+      # own ledger, and the diff asserts the committed twin is current.
+      - name: Regenerate Markdown and assert it matches what is committed
+        run: |
+          set -eu
+          python tools/html_to_markdown.py
+          if ! git diff --quiet -- blog/*.md; then
+            echo "::error::blog/*.md is stale; run tools/html_to_markdown.py and commit"
+            git --no-pager diff --stat -- blog/*.md
+            exit 1
+          fi
+          echo "markdown twins are current"
+
   blog:
     name: pages (self-contained)
     runs-on: ubuntu-latest
