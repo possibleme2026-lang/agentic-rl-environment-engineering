@@ -5,7 +5,8 @@ headless browser, dumps the post-script DOM, and checks:
 
   1. every page parses and the series elements survive into the DOM;
   2. the nav text says what it should (Part 1 vs Part 2, correct direction);
-  3. every relative href in the rendered DOM resolves to a file on disk.
+  3. every relative href in the rendered DOM resolves to a file on disk;
+  4. every diagram survives rendering with real geometry and a caption.
 
 Anything less would be checking my copy of the page rather than the page.
 """
@@ -24,6 +25,19 @@ CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
 PAGES = ("index.html", "blog/environment-engineering.html", "blog/mimo-v2.6-rl.html")
 HREF_RE = re.compile(r'href="([^"#][^"]*)"')
 TAG_RE = re.compile(r"<[^>]+>")
+
+# The post with the diagrams, and the floor each one must clear to count as a
+# drawing rather than an empty frame. Deliberately not a shape-count floor:
+# the diagrams here are not all box-and-arrow. One is a nested hierarchy whose
+# structure is in the widths, one is a table laid out in text, one is a row of
+# table columns. A shape floor tuned for the first kind failed the other two
+# and would have "caught" correct output -- the failure mode being guarded
+# against is an <svg> that renders empty, which is a floor of zero shapes and
+# no labels, not a floor of fewer than six boxes.
+FIGURES_PAGE = "blog/mimo-v2.6-rl.html"
+MIN_SHAPES_PER_FIGURE = 1
+MIN_ELEMENTS_PER_FIGURE = 8
+MIN_LABELS_PER_FIGURE = 3
 
 
 def dump_dom(rel: str) -> str:
@@ -56,6 +70,41 @@ def text_of(dom: str, class_name: str) -> list[str]:
         flags=re.DOTALL,
     ):
         out.append(html.unescape(TAG_RE.sub(" ", block)).strip())
+    return out
+
+
+def figures_in(dom: str) -> list[tuple[str, int, int, int, int]]:
+    """Return one tuple per rendered figure: (aria-label, elements, shapes, labels, caption).
+
+    Counting what the SVG actually contains rather than trusting the <figure>
+    tag, because a diagram that lost its contents still renders as a bordered
+    empty box, and that is indistinguishable from "fine" without looking at the
+    pixels. ``elements`` covers everything that would paint: geometry, labels
+    and their spans. A caption is reported as negative when the <svg> has no
+    viewBox, which means it has no coordinate system and will not scale.
+    """
+    out = []
+    for block in re.findall(r'<figure class="fig".*?</figure>', dom, flags=re.DOTALL):
+        label = re.search(r'aria-label="([^"]*)"', block)
+        cap = re.search(r"<figcaption[^>]*>(.*?)</figcaption>", block, flags=re.DOTALL)
+        svg = re.search(r"<svg[^>]*>", block)
+        body = block[svg.end() :] if svg else ""
+        shapes = len(
+            re.findall(r"<(?:rect|line|path|circle|ellipse|polygon|polyline)\b", body)
+        )
+        labels = len(re.findall(r"<text\b", body))
+        elements = shapes + labels + len(re.findall(r"<tspan\b", body))
+        caption_len = len(html.unescape(TAG_RE.sub("", cap.group(1))).strip()) if cap else 0
+        has_viewbox = bool(svg and "viewBox" in svg.group(0))
+        out.append(
+            (
+                (label.group(1)[:60] if label else ""),
+                elements,
+                shapes,
+                labels,
+                caption_len if has_viewbox else -caption_len,
+            )
+        )
     return out
 
 
@@ -120,6 +169,43 @@ def main() -> int:
         if target not in dom0:
             failures.append(f"index.html: no rendered link to {target}")
 
+    # 6. every diagram must survive rendering: geometry, labels, a viewBox and a
+    #    caption. An empty <figure> is the failure this is here to catch.
+    figs = figures_in(dump_dom(FIGURES_PAGE))
+    checks += 1
+    if not figs:
+        failures.append(f"{FIGURES_PAGE}: no rendered figures found")
+    for aria, elements, shapes, labels, caption in figs:
+        checks += 1
+        name = aria or "(no aria-label)"
+        if caption < 0:
+            failures.append(f"{FIGURES_PAGE}: figure {name!r} rendered without a viewBox")
+        elif caption < 80:
+            failures.append(
+                f"{FIGURES_PAGE}: figure {name!r} caption is only {caption} chars; "
+                "it has to stand alone for a reader who cannot see the drawing"
+            )
+        if shapes < MIN_SHAPES_PER_FIGURE:
+            failures.append(
+                f"{FIGURES_PAGE}: figure {name!r} rendered {shapes} shapes; "
+                "nothing in it would paint"
+            )
+        if elements < MIN_ELEMENTS_PER_FIGURE:
+            failures.append(
+                f"{FIGURES_PAGE}: figure {name!r} rendered only {elements} elements "
+                f"(< {MIN_ELEMENTS_PER_FIGURE}); looks like an empty frame"
+            )
+        if labels < MIN_LABELS_PER_FIGURE:
+            failures.append(
+                f"{FIGURES_PAGE}: figure {name!r} rendered {labels} labels; "
+                "a diagram with no readable labels explains nothing"
+            )
+        if not aria:
+            failures.append(
+                f"{FIGURES_PAGE}: figure has no aria-label, so it is invisible to "
+                "a screen reader"
+            )
+
     if failures:
         print(f"FAIL — {len(failures)} problem(s) across {checks} rendered checks:\n")
         for item in failures:
@@ -128,6 +214,11 @@ def main() -> int:
     print(f"OK — {checks} rendered checks passed")
     for bar in bars1 + bars2:
         print(f"     nav: {' '.join(bar.split())[:110]}")
+    for aria, elements, shapes, labels, caption in figs:
+        print(
+            f"     fig: {elements:>3} elements ({shapes} shapes, {labels} labels) "
+            f"{caption:>4} chars — {' '.join(aria.split())[:60]}"
+        )
     return 0
 
 

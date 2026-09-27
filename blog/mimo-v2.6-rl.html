@@ -135,6 +135,50 @@
   mark{background:#fdf0c8;padding:1px 3px;border-radius:3px}
   .lede{font-size:18.4px;color:var(--ink2);line-height:1.7}
   .lede strong{color:#000}
+
+  /* ---- figures ----
+     Diagrams are inline SVG: the post has to open from the filesystem with no
+     network, so a chart image is not an option. The SVG element classes are
+     defined here rather than inline so a single edit restyles every diagram.
+     Class names are prefixed fg- to avoid colliding with .lbl on callouts. */
+  figure.fig{
+    background:var(--panel);border:1px solid var(--line);border-radius:9px;
+    padding:22px 22px 16px;margin:0 0 26px;
+  }
+  figure.fig svg{display:block;width:100%;height:auto;margin:0 auto}
+  figure.fig figcaption{
+    margin-top:16px;padding-top:13px;border-top:1px solid var(--line2);
+    font-size:13.8px;line-height:1.65;color:var(--muted);
+  }
+  figure.fig figcaption b{color:var(--ink2)}
+  .fg-n{fill:#fff;stroke:var(--line);stroke-width:1.4}
+  .fg-n-a{fill:#fdf7f6;stroke:var(--accent);stroke-width:1.4}
+  .fg-n-b{fill:#f4f8fa;stroke:var(--accent2);stroke-width:1.4}
+  .fg-n-c{fill:#f7f5fa;stroke:var(--accent3);stroke-width:1.4}
+  .fg-n-ok{fill:#f6fbf7;stroke:var(--ok);stroke-width:1.4}
+  .fg-t{font-family:var(--sans);font-size:12.5px;font-weight:700;fill:var(--ink)}
+  .fg-s{font-family:var(--sans);font-size:11px;fill:var(--muted)}
+  .fg-k{font-family:var(--mono);font-size:11px;fill:#8a3324}
+  .fg-e{stroke:var(--muted);stroke-width:1.5;fill:none}
+  .fg-el{font-family:var(--sans);font-size:10.5px;fill:var(--muted)}
+  .fg-band{fill:#faf7f3}
+
+  /* ---- worked case ----
+     One concrete run, traced end to end. Visually distinct from a callout so a
+     reader who skips prose can still find the worked example. */
+  .case{
+    background:#fcfbf9;border:1px solid var(--line);border-radius:9px;
+    padding:2px 22px 4px;margin:0 0 26px;
+  }
+  .case .case-lbl{
+    display:inline-block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    font-weight:700;color:#fff;background:var(--accent2);
+    padding:3px 9px;border-radius:999px;margin:18px 0 0;
+  }
+  .case h4{margin:14px 0 9px;font-size:16px;color:var(--ink)}
+  .case p{margin:0 0 14px;font-size:15.2px}
+  .case p:last-child{margin-bottom:18px}
+  .case ol,.case ul{margin:0 0 14px;padding-left:24px;font-size:15.2px}
   @media (max-width:640px){
     h1{font-size:31px} h2{font-size:24px} body{font-size:16px}
     .wrap{padding:0 18px 80px} header.hero{padding:46px 0 32px}
@@ -204,6 +248,7 @@
 <div class="toc">
   <div class="lbl">Contents</div>
   <ol>
+    <li><a href="#s0">Before the code: what RL actually does</a></li>
     <li><a href="#s1">What was actually released (and what wasn't)</a></li>
     <li><a href="#s2">The provenance puzzle: whose code is this?</a></li>
     <li><a href="#s3">The architecture in one picture</a></li>
@@ -223,6 +268,73 @@
 <p class="lede">The MiMo-V2.6 technical report describes a large-scale agentic RL run: <strong>1,568 prompts × 16 rollouts = 25,000 trajectories per step</strong>, 2.7–3.7 billion tokens per batch, up to 1M-token contexts, across five task domains and eight agent harnesses. Reports like this usually stop at the equations. What makes this release unusual is that Xiaomi also published a <code>verl</code> fork that implements the recipe, plus the actual task environments as Docker images.</p>
 
 <p class="lede">So this is a reading exercise. For each claim in the report, I went looking for the code or the environment that makes it concrete — and where the code contradicts the report, I say so.</p>
+
+<h2 id="s0">Before the code: what RL actually does</h2>
+
+<p>If you have never trained a model with reinforcement learning, this section is the only part of the post you need before the rest of it makes sense. It is deliberately short, and nothing later depends on any other background.</p>
+
+<p>Reinforcement learning here means one loop, repeated until you stop paying for it:</p>
+
+<ol>
+  <li><strong>Roll out.</strong> Hand the model a task and let it attempt the task. Not once — <em>several</em> times. Each attempt is a <strong>rollout</strong>.</li>
+  <li><strong>Score.</strong> Something outside the model decides how each attempt did. For code tasks that something is usually the project's own test suite, which either passes or does not. The score is the <strong>reward</strong>.</li>
+  <li><strong>Compare.</strong> Put this task's attempts side by side and ask which ones did better than the group's own average. That gap is the <strong>advantage</strong>.</li>
+  <li><strong>Update.</strong> Nudge the weights toward the attempts carrying positive advantage, and away from the ones carrying negative advantage.</li>
+</ol>
+
+<figure class="fig">
+<svg viewBox="0 0 694 150" role="img" aria-label="Four stages of the RL loop — roll out, score, compare, update — with an arrow returning from update back to roll out, meaning the loop repeats each training step.">
+  <defs>
+    <marker id="ar-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b6b6b"/>
+    </marker>
+  </defs>
+  <rect class="fg-n-a" x="0" y="12" width="160" height="78" rx="7"/>
+  <text class="fg-t" x="80" y="37" text-anchor="middle">1. Roll out</text>
+  <text class="fg-s" x="80" y="57" text-anchor="middle">the model attempts</text>
+  <text class="fg-s" x="80" y="73" text-anchor="middle">this task 16 times</text>
+  <rect class="fg-n-b" x="178" y="12" width="160" height="78" rx="7"/>
+  <text class="fg-t" x="258" y="37" text-anchor="middle">2. Score</text>
+  <text class="fg-s" x="258" y="57" text-anchor="middle">the task's own tests</text>
+  <text class="fg-s" x="258" y="73" text-anchor="middle">pass or fail &#8594; 1 or 0</text>
+  <rect class="fg-n-c" x="356" y="12" width="160" height="78" rx="7"/>
+  <text class="fg-t" x="436" y="37" text-anchor="middle">3. Compare</text>
+  <text class="fg-s" x="436" y="57" text-anchor="middle">each attempt against</text>
+  <text class="fg-s" x="436" y="73" text-anchor="middle">the group's own mean</text>
+  <rect class="fg-n-ok" x="534" y="12" width="160" height="78" rx="7"/>
+  <text class="fg-t" x="614" y="37" text-anchor="middle">4. Update</text>
+  <text class="fg-s" x="614" y="57" text-anchor="middle">push up what beat</text>
+  <text class="fg-s" x="614" y="73" text-anchor="middle">the mean, push down the rest</text>
+  <line class="fg-e" x1="162" y1="51" x2="175" y2="51" marker-end="url(#ar-loop)"/>
+  <line class="fg-e" x1="340" y1="51" x2="353" y2="51" marker-end="url(#ar-loop)"/>
+  <line class="fg-e" x1="518" y1="51" x2="531" y2="51" marker-end="url(#ar-loop)"/>
+  <path class="fg-e" d="M 614 92 V 132 H 80 V 95" marker-end="url(#ar-loop)"/>
+  <text class="fg-el" x="347" y="124" text-anchor="middle">repeat for every training step &#8212; MiMo's recipe runs 200 of them</text>
+</svg>
+<figcaption><b>The whole of RL, in four boxes.</b> Steps 1 and 2 are machinery: you need a way to run the task and a way to score it. Step 3 is where the algorithm lives, and step 4 is a few lines of tensor arithmetic. Everything this post examines — the penalty module, the groupwise graders, the four harnesses — is engineering wrapped around <b>step 3</b>, because step 3 is where RL either works or quietly falls apart.</figcaption>
+</figure>
+
+<p><strong>Why a group of 16, and not just one score.</strong> This is the part that trips people up. A reward of 0.8 tells you nothing on its own: is that good? Bad? To learn from a number you need something to compare it against, and a hand-written threshold is just a guess wearing a lab coat. GRPO — the algorithm this release uses — compares each attempt against its <em>siblings</em> on the same task. Sixteen attempts on one prompt give you a per-task baseline for free, with no threshold to guess at.</p>
+
+<p>That choice is also where the trouble starts, and it explains most of the design decisions in the sections that follow. If the baseline is the group's own mean, then the baseline is only meaningful when all sixteen attempts were handed <em>the same task in the same environment</em>. Break that and you are comparing scores from two different worlds. Hold onto that thought — it is the entire reason for the harness-mixing rule in &sect;7 and for half of what the penalty module does in &sect;5.</p>
+
+<p><strong>The scale.</strong> The report describes 1,568 prompts per step, 16 rollouts each: <strong>25,000 trajectories per training step</strong>, 2.7–3.7 billion tokens per batch, up to 1M-token contexts. That is the number this whole release is built around, and it is why so much of the code is about plumbing rather than about learning.</p>
+
+<div class="case">
+  <span class="case-lbl">Worked case &middot; one prompt, one step</span>
+  <h4>What actually happens to one prompt, end to end</h4>
+  <p>Abstract loops are easy to nod along to and hard to hold in your head. So here is a single prompt traced through a single training step, using only values that appear in the released configuration. Where I do arithmetic on those values I say so; nothing here is a measured result.</p>
+  <ol>
+    <li><strong>The Sample Mixer picks a prompt.</strong> Say it is one of the 2,698 code tasks. Each one ships with its own Docker image and its own test suite.</li>
+    <li><strong>A step-hash decides which harness runs it.</strong> <code>sha256(seed, harness_round, sample_key)</code> is reduced modulo four and picks one of <code>mini-bash</code>, <code>mini-mimocode</code>, <code>mini-claude-code</code>, <code>mini-codex</code>. <strong>All 16 rollouts run in that same harness</strong>, in containers capped at <code>cpu_limit: 4</code>, <code>memory_limit: 8Gi</code>, <code>step_limit: 500</code>.</li>
+    <li><strong>Each rollout is scored by the task's tests.</strong> Binary: 1 or 0. No partial credit at this layer.</li>
+    <li><strong>Degenerate groups are thrown away.</strong> With <code>filter_groups.enable: true</code>, a group where all 16 pass or all 16 fail is dropped. Sixteen identical scores carry no information: zero variance, zero gradient, wasted compute.</li>
+    <li><strong>The survivors get an advantage.</strong> <code>advantage = reward &minus; group mean</code>. Note <code>norm_adv_by_std_in_grpo: false</code> — there is no division by the group's standard deviation, so the signal stays proportional to the actual gap in reward rather than being inflated by a near-degenerate group.</li>
+    <li><strong>The gradient is averaged per prompt, not per token.</strong> <code>loss_agg_mode: prompt-mean</code> means this prompt contributes <b>1/1568 of the step's gradient</b> whether its rollouts took 3 turns or 300.</li>
+  </ol>
+  <p><strong>The arithmetic, spelled out.</strong> Suppose 3 of the 16 rollouts pass. The group mean is 3/16 = 0.1875, so each passing rollout carries an advantage of 1 &minus; 0.1875 = <strong>+0.8125</strong>, and each of the 13 failures carries 0 &minus; 0.1875 = <strong>&minus;0.1875</strong>. Training then raises the probability of the three winning trajectories and lowers that of the thirteen others. This is arithmetic on the shipped configuration, not a measurement from the run.</p>
+  <p>The last step is the one worth noticing. A 50-turn trajectory and a 1-turn trajectory count the same, which matters because &sect;5.5 of the report lists trajectories hitting their length limit as a primary failure mode. Averaging over tokens instead would have handed the longest trajectories the most gradient — rewarding the model for <em>taking longer</em> rather than for <em>being right</em>.</p>
+</div>
 
 <h2 id="s1">1. What was actually released (and what wasn't)</h2>
 
@@ -335,6 +447,34 @@ verl/trainer/ppo/v1/trainer_base.py:262</code></pre>
                            (only model-generated turns contribute to the loss)</code></pre>
 
 <p>This hierarchy is not cosmetic — it's what makes the Penalty Module able to target a decision at the right granularity. Hold that thought for §5.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 694 258" role="img" aria-label="Four nested levels of trajectory data: a Sample contains Sequences, a Sequence contains Contexts, a Context contains Segments. Only model-generated Segments contribute to the loss.">
+  <rect class="fg-n-a" x="0" y="8" width="694" height="44" rx="7"/>
+  <text class="fg-t" x="16" y="27">Sample</text>
+  <text class="fg-s" x="76" y="27">one prompt &#8212; spawns the GRPO group of 16</text>
+  <text class="fg-s" x="16" y="44" fill="#c0392b">the group is accepted or rejected as a whole, so nothing may be scored per-sequence</text>
+
+  <rect class="fg-n-b" x="26" y="60" width="668" height="42" rx="7"/>
+  <text class="fg-t" x="42" y="78">Sequence</text>
+  <text class="fg-s" x="114" y="78">one Agent Loop execution</text>
+  <text class="fg-s" x="42" y="95">owns the environment lifecycle; calls the inference engine on demand</text>
+
+  <rect class="fg-n-c" x="52" y="110" width="642" height="42" rx="7"/>
+  <text class="fg-t" x="68" y="128">Context</text>
+  <text class="fg-s" x="132" y="128">one dialogue branch</text>
+  <text class="fg-s" x="68" y="145">the unit of prefix matching, KV reuse and export</text>
+
+  <rect class="fg-n" x="78" y="160" width="616" height="42" rx="7"/>
+  <text class="fg-t" x="94" y="178">Segment</text>
+  <text class="fg-s" x="162" y="178">one turn &#8212; system/user message, model generation, or tool result</text>
+  <text class="fg-s" x="94" y="195" fill="#2d7a4f">only model-generated turns contribute to the loss</text>
+
+  <text class="fg-s" x="0" y="222">The penalty module attaches a rule to any one of these levels, which is what lets it punish a bad decision</text>
+  <text class="fg-s" x="0" y="238">without discarding the whole trajectory. Punish too coarsely and you throw away the turns that were fine.</text>
+</svg>
+<figcaption><b>Four levels, and the one that matters for training.</b> The hierarchy exists so a penalty can be aimed precisely. The <b>Sample</b> is the group that gets a single accept/reject verdict, the <b>Sequence</b> is one attempt inside it, the <b>Context</b> is a dialogue branch, and the <b>Segment</b> is a single turn. Only model-generated segments reach the loss — a tool that returns an unhelpful result is not the model's fault, so it cannot be trained away. Reading the penalty module in &sect;5 without this picture is what makes its <code>level</code> field look arbitrary.</figcaption>
+</figure>
 
 <h2 id="s4">4. GRPO, but engineered</h2>
 
@@ -526,6 +666,55 @@ R<sub>i</sub> = R<sup>test</sup><sub>i</sub> · S<sup>sol</sup><sub>i</sub> · S
 
 <p>Multiplicative rather than additive, deliberately: "This multiplicative form keeps rubric supervision tied to test outcomes. Failed trajectories retain zero reward, while passing trajectories are further distinguished by implementation quality and problem-solving behavior." When every rollout passes, the product of the two rubric scores still separates them — that's the learning signal binary rewards throw away.</p>
 
+<figure class="fig">
+<svg viewBox="0 0 694 250" role="img" aria-label="Four rollouts that all pass their tests. Additive rubrics cannot separate them because there is no variance. Multiplicative rubrics keep the spread, so all four still produce different rewards.">
+  <text class="fg-t" x="0" y="16">Four rollouts, one task &#8212; all four pass the task's tests</text>
+  <text class="fg-s" x="0" y="34">Binary rewards give all four the identical score of 1.0, so the group has zero variance and produces no gradient at all.</text>
+
+  <rect class="fg-band" x="0" y="46" width="694" height="26" rx="6"/>
+  <text class="fg-s" x="12" y="63">rollout</text>
+  <text class="fg-s" x="150" y="63">R test</text>
+  <text class="fg-s" x="248" y="63">S solution</text>
+  <text class="fg-s" x="368" y="63">S behaviour</text>
+  <text class="fg-s" x="500" y="63" fill="#c0392b">additive: sum</text>
+  <text class="fg-s" x="600" y="63" fill="#2d7a4f">shipped: product</text>
+
+  <text class="fg-k" x="12" y="92">#1</text>
+  <text class="fg-k" x="150" y="92">1</text>
+  <text class="fg-k" x="248" y="92">0.9</text>
+  <text class="fg-k" x="368" y="92">0.8</text>
+  <text class="fg-k" x="500" y="92" fill="#c0392b">1 + 0.9 + 0.8 = 2.7</text>
+  <text class="fg-k" x="600" y="92" fill="#2d7a4f">1 &#215; 0.9 &#215; 0.8 = 0.72</text>
+
+  <text class="fg-k" x="12" y="116">#2</text>
+  <text class="fg-k" x="150" y="116">1</text>
+  <text class="fg-k" x="248" y="116">0.5</text>
+  <text class="fg-k" x="368" y="116">0.6</text>
+  <text class="fg-k" x="500" y="116" fill="#c0392b">1 + 0.5 + 0.6 = 2.1</text>
+  <text class="fg-k" x="600" y="116" fill="#2d7a4f">1 &#215; 0.5 &#215; 0.6 = 0.30</text>
+
+  <text class="fg-k" x="12" y="140">#3</text>
+  <text class="fg-k" x="150" y="140">1</text>
+  <text class="fg-k" x="248" y="140">0.8</text>
+  <text class="fg-k" x="368" y="140">0.9</text>
+  <text class="fg-k" x="500" y="140" fill="#c0392b">1 + 0.8 + 0.9 = 2.7</text>
+  <text class="fg-k" x="600" y="140" fill="#2d7a4f">1 &#215; 0.8 &#215; 0.9 = 0.72</text>
+
+  <text class="fg-k" x="12" y="164">#4</text>
+  <text class="fg-k" x="150" y="164">1</text>
+  <text class="fg-k" x="248" y="164">0.3</text>
+  <text class="fg-k" x="368" y="164">0.4</text>
+  <text class="fg-k" x="500" y="164" fill="#c0392b">1 + 0.3 + 0.4 = 1.7</text>
+  <text class="fg-k" x="600" y="164" fill="#2d7a4f">1 &#215; 0.3 &#215; 0.4 = 0.12</text>
+
+  <line class="fg-e" x1="0" y1="180" x2="694" y2="180"/>
+  <text class="fg-s" x="0" y="200" fill="#c0392b">A failed rollout keeps a non-zero share under a sum: 0 + 0.9 + 0.8 = 1.7.</text>
+  <text class="fg-s" x="0" y="216" fill="#c0392b">That would pay a model for writing a beautiful patch that does not work.</text>
+  <text class="fg-s" x="0" y="236" fill="#2d7a4f">Under a product it collapses to exactly zero &#8212; which is why the multiplication is load-bearing, not cosmetic.</text>
+</svg>
+<figcaption><b>Why the reward multiplies instead of adding.</b> These four rollouts all pass, so the test score is 1.0 for each and the group looks degenerate. The rubric scores are what separate them. Addition is the intuitive choice and it is <b>wrong here</b>: a failing rollout would still collect its rubric points, so a model could learn to write elegant, well-argued patches that do not actually work — the exact failure the report calls out ("broad exports, exception swallowing, relaxed validation"). Multiplication kills that path, because any zero anywhere makes the whole product zero. <b>Test outcome gates the reward; rubrics only rank within the survivors.</b> (The rubric values are illustrative; the multiplication is the shipped <code>R = R<sup>test</sup> &#183; S<sup>sol</sup> &#183; S<sup>beh</sup></code>.)</figcaption>
+</figure>
+
 <p>The report gives a qualitative justification for why this beats naive patch-size penalties: policies trained with online grading "produce smaller, more precise patches that remained within the requested scope", whereas workarounds such as "broad exports, exception swallowing, relaxed validation" aim to pass tests "but can exceed the scope of the task instructions".</p>
 
 <h3>6.2 GAR — Groupwise Advantage Redistribution (online)</h3>
@@ -605,6 +794,54 @@ label, config_path = specs[index % len(specs)]</code></pre>
 
 <p>Crucially, <strong>a GRPO group stays on one arm</strong>, and the sample rotates across arms between steps. The env example states the consequence plainly: "With four harness arms and step-hash mixing, a group stays on one arm and the sample rotates across arms between steps, so N does not need to be a multiple of four."</p>
 
+<figure class="fig">
+<svg viewBox="0 0 694 232" role="img" aria-label="Two panels contrasting a wrong design and the shipped design. Wrong: one group of 16 rollouts split across four harnesses, so the group mean blends four different environments. Shipped: each group stays wholly inside one harness while the prompt rotates to a different harness at the next step.">
+  <defs>
+    <marker id="ar-mix" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b6b6b"/>
+    </marker>
+  </defs>
+  <rect class="fg-band" x="0" y="0" width="694" height="106" rx="7"/>
+  <text class="fg-t" x="14" y="22" fill="#c0392b">&#10007;  Wrong: split one group across harnesses</text>
+  <rect class="fg-n-a" x="14" y="34" width="118" height="56" rx="6"/>
+  <text class="fg-t" x="73" y="58" text-anchor="middle">mini-bash</text>
+  <text class="fg-s" x="73" y="76" text-anchor="middle">4 rollouts</text>
+  <rect class="fg-n-a" x="146" y="34" width="118" height="56" rx="6"/>
+  <text class="fg-t" x="205" y="58" text-anchor="middle">mini-mimocode</text>
+  <text class="fg-s" x="205" y="76" text-anchor="middle">4 rollouts</text>
+  <rect class="fg-n-a" x="278" y="34" width="118" height="56" rx="6"/>
+  <text class="fg-t" x="337" y="58" text-anchor="middle">mini-claude-code</text>
+  <text class="fg-s" x="337" y="76" text-anchor="middle">4 rollouts</text>
+  <rect class="fg-n-a" x="410" y="34" width="118" height="56" rx="6"/>
+  <text class="fg-t" x="469" y="58" text-anchor="middle">mini-codex</text>
+  <text class="fg-s" x="469" y="76" text-anchor="middle">4 rollouts</text>
+  <line class="fg-e" x1="528" y1="62" x2="558" y2="62" marker-end="url(#ar-mix)"/>
+  <text class="fg-s" x="566" y="52" fill="#c0392b">One mean over four</text>
+  <text class="fg-s" x="566" y="68" fill="#c0392b">environments. The</text>
+  <text class="fg-s" x="566" y="84" fill="#c0392b">baseline is noise.</text>
+
+  <rect class="fg-band" x="0" y="126" width="694" height="106" rx="7"/>
+  <text class="fg-t" x="14" y="148" fill="#2d7a4f">&#10003;  Shipped: a group stays whole, the prompt rotates</text>
+  <rect class="fg-n-ok" x="14" y="160" width="118" height="56" rx="6"/>
+  <text class="fg-t" x="73" y="184" text-anchor="middle">mini-bash</text>
+  <text class="fg-s" x="73" y="202" text-anchor="middle">step 1</text>
+  <rect class="fg-n-ok" x="146" y="160" width="118" height="56" rx="6"/>
+  <text class="fg-t" x="205" y="184" text-anchor="middle">mini-codex</text>
+  <text class="fg-s" x="205" y="202" text-anchor="middle">step 2</text>
+  <rect class="fg-n-ok" x="278" y="160" width="118" height="56" rx="6"/>
+  <text class="fg-t" x="337" y="184" text-anchor="middle">mini-mimocode</text>
+  <text class="fg-s" x="337" y="202" text-anchor="middle">step 3</text>
+  <rect class="fg-n-ok" x="410" y="160" width="118" height="56" rx="6"/>
+  <text class="fg-t" x="469" y="184" text-anchor="middle">mini-claude-code</text>
+  <text class="fg-s" x="469" y="202" text-anchor="middle">step 4</text>
+  <line class="fg-e" x1="528" y1="188" x2="558" y2="188" marker-end="url(#ar-mix)"/>
+  <text class="fg-s" x="566" y="178" fill="#2d7a4f">Same 16 rollouts,</text>
+  <text class="fg-s" x="566" y="194" fill="#2d7a4f">one environment.</text>
+  <text class="fg-s" x="566" y="210" fill="#2d7a4f">The mean means something.</text>
+</svg>
+<figcaption><b>Why a group may not be split across harnesses.</b> GRPO's baseline is the group's own mean, which is only a baseline if every member faced the same conditions. Split one group over four harnesses and you are averaging scores from four different worlds — a low score might mean a weak attempt, or it might just mean a terser tool set. The shipped design keeps the group intact and rotates the <em>prompt</em> instead, so over many steps every prompt still sees every harness. <b>This is also why <code>N=16</code> need not be a multiple of four</b>, which is the sort of detail that looks arbitrary until you see the constraint behind it.</figcaption>
+</figure>
+
 <p>That's a real constraint, not a nicety. If a group's 16 rollouts were split across 4 harnesses, the group-relative advantage would be comparing scores from <em>different environments</em> — the baseline would be meaningless.</p>
 
 <p>On the seed, the env example is emphatic:</p>
@@ -654,6 +891,45 @@ _dump_raw_generation collects the evidence.</code></pre>
 </table>
 
 <p>The defence has three layers, and the code implements the third.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 694 244" role="img" aria-label="Three defence layers against solution leakage. Layer 1 is mid-training alignment data, layer 2 is environment preparation, layer 3 is adversarial screening with a prompt-level clause and runtime interception. The five leak vectors are listed on the left as real commands observed in the run.">
+  <defs>
+    <marker id="ar-hack" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b6b6b"/>
+    </marker>
+  </defs>
+  <rect class="fg-n-a" x="0" y="8" width="220" height="128" rx="7"/>
+  <text class="fg-t" x="14" y="28">The five observed leaks</text>
+  <text class="fg-k" x="14" y="48">pip install pytest==5.4.3</text>
+  <text class="fg-k" x="14" y="66">curl .../timeseries/core.py</text>
+  <text class="fg-k" x="14" y="84">git clone .../matplotlib.git</text>
+  <text class="fg-k" x="14" y="102">read ticket #29205 history</text>
+  <text class="fg-k" x="14" y="120">compare later releases</text>
+  <text class="fg-s" x="14" y="134">real commands, from report &#167;4.2.6</text>
+
+  <line class="fg-e" x1="222" y1="72" x2="246" y2="72" marker-end="url(#ar-hack)"/>
+
+  <rect class="fg-n-b" x="250" y="8" width="444" height="38" rx="7"/>
+  <text class="fg-t" x="264" y="26">Layer 1 &#183; mid-training alignment data</text>
+  <text class="fg-s" x="264" y="40">cases where the model reflects on faulty reasoning, revises the turn, keeps the original error recognisable</text>
+
+  <rect class="fg-n-c" x="250" y="54" width="444" height="38" rx="7"/>
+  <text class="fg-t" x="264" y="72">Layer 2 &#183; environment preparation</text>
+  <text class="fg-s" x="264" y="86">artefact, cache and git cleanup plus network isolation &#8212; the <tspan class="fg-k">anti_hack_cleanup: true</tspan> flag</text>
+
+  <rect class="fg-n-ok" x="250" y="100" width="444" height="36" rx="7"/>
+  <text class="fg-t" x="264" y="118">Layer 3 &#183; adversarial screening and running audit &#8212; the layer that ships</text>
+  <text class="fg-s" x="264" y="131">prompt clause in mini-claude-code.yaml + AntiHackGuard on the action-interceptor chain</text>
+
+  <rect class="fg-band" x="0" y="150" width="694" height="86" rx="7"/>
+  <text class="fg-t" x="14" y="170">How the runtime guard handles a hit &#8212; intercept, do not terminate</text>
+  <text class="fg-s" x="14" y="190">The tool call is inspected <tspan class="fg-k">before</tspan> it runs and replaced with a dummy observation, so&#8230;</text>
+  <text class="fg-s" x="14" y="208" fill="#2d7a4f">&#10003;  the shortcut cannot reach the answer, so the verifiable reward cannot be inflated</text>
+  <text class="fg-s" x="14" y="226" fill="#2d7a4f">&#10003;  the rollout is never abruptly rejected &#8212; and rejecting whole rollouts is what destabilises training</text>
+</svg>
+<figcaption><b>Three layers, of which one is actually in the released code.</b> Layers 1 and 2 are training-data and environment hygiene; only layer 3 — the adversarial screening — is what the repository ships, and only its first stage. The design choice worth copying is <b>interception over termination</b>: a hacked tool call returns a harmless dummy result instead of killing the rollout. Blocking looks stricter and is worse, because punishing by rejection removes the trajectory from the advantage calculation, and a model never punished for trying a shortcut never learns that shortcuts fail. <b>The logged confirmed-hack share stays under 2% across the whole run.</b></figcaption>
+</figure>
 
 <p><strong>Layer 1 — mid-training alignment data.</strong> Cases were synthesised where "MiMo reflects on the faulty reasoning, revises the relevant turn, and continues with actions grounded in the task specification", with the revised reasoning keeping "the original error recognizable".</p>
 

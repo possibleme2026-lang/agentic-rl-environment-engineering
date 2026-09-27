@@ -58,7 +58,8 @@ MINIMAL_PART1 = """<html><head><style>body{}</style></head>
 
 # The Markdown twins must mirror the HTML's headings, fences and tables. Each
 # fixture below is the valid twin of the HTML above: one h1, one h2, one fenced
-# block, one two-column table with one body row.
+# block, one two-column table with one body row, and one figure reduced to its
+# caption (the drawing is inline SVG and has no Markdown representation).
 MINIMAL_MD = """# Title
 
 ## Section
@@ -70,6 +71,8 @@ echo hi
 | a | b |
 |---|---|
 | 1 | 2 |
+
+**Figure.** A box labelled A points at a box labelled B.
 """
 
 MINIMAL_INDEX = """<html><head><style>body{}</style></head>
@@ -79,7 +82,9 @@ MINIMAL_INDEX = """<html><head><style>body{}</style></head>
 </body></html>
 """
 
-# HTML twins matching MINIMAL_MD, used only for the parity checks.
+# HTML twins matching MINIMAL_MD, used only for the parity checks. The figure
+# carries an inline <svg>: the parity check asserts that its labels stay out of
+# the Markdown, which is the one way a diagram can corrupt the text version.
 MINIMAL_HTML_POST = """<html><head><style>body{}</style></head>
 <body>
 <header class="hero"><h1>Title</h1></header>
@@ -87,6 +92,11 @@ MINIMAL_HTML_POST = """<html><head><style>body{}</style></head>
 <pre><code>echo hi</code></pre>
 <table><thead><tr><th>a</th><th>b</th></tr></thead>
 <tbody><tr><td>1</td><td>2</td></tr></tbody></table>
+<figure class="fig">
+<svg viewBox="0 0 200 40"><rect class="fg-n" x="0" y="0" width="80" height="30"/>
+<text class="fg-t" x="8" y="20">BoxA</text><text class="fg-t" x="120" y="20">BoxB</text></svg>
+<figcaption>A box labelled A points at a box labelled B.</figcaption>
+</figure>
 <a href="PLACEHOLDER">other</a>
 </body></html>
 """
@@ -392,6 +402,53 @@ def test_detects_presentation_leaking_into_markdown(repo: Path) -> None:
     result = run_gate(repo)
     assert result.returncode == 1
     assert "presentation leaked" in result.stdout
+
+
+def test_detects_missing_figure_caption(repo: Path) -> None:
+    """A figure whose caption never reached the Markdown is invisible to a reader.
+
+    The drawing is SVG and does not survive conversion, so the caption is the
+    only thing standing in for it. Lose that and the Markdown still reads as
+    complete prose while one diagram's worth of explanation is simply gone.
+    """
+    md = repo / "blog" / "mimo-v2.6-rl.md"
+    text = md.read_text(encoding="utf-8")
+    md.write_text(
+        text.replace("**Figure.** A box labelled A points at a box labelled B.\n", ""),
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "figure captions" in result.stdout
+
+
+def test_detects_svg_leaking_into_markdown(repo: Path) -> None:
+    """If <svg> drops out of the converter's skip list, labels land as prose.
+
+    The converter recurses into unknown blocks rather than dropping them, which
+    is the right default everywhere except here: a diagram's box labels would
+    arrive as a flat paragraph that reads like a sentence.
+    """
+    md = repo / "blog" / "mimo-v2.6-rl.md"
+    md.write_text(
+        md.read_text(encoding="utf-8") + '\n<svg viewBox="0 0 10 10"></svg>\n',
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "SVG leaked" in result.stdout
+
+
+def test_detects_figure_captions_outnumbering_figures(repo: Path) -> None:
+    """A stray caption with no figure behind it is a conversion artefact too."""
+    md = repo / "blog" / "mimo-v2.6-rl.md"
+    md.write_text(
+        md.read_text(encoding="utf-8") + "\n**Figure.** A caption with no diagram.\n",
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "figure captions" in result.stdout
 
 
 def test_detects_missing_nojekyll(repo: Path) -> None:

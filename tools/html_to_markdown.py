@@ -24,13 +24,15 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 ROOT = Path(__file__).resolve().parent.parent
 
 # Blocks whose entire subtree is presentation, not content.
-SKIP_TAGS = {"style", "script", "nav"}
+SKIP_TAGS = {"style", "script", "nav", "svg"}
 
 # Where a class carries meaning, map the container to a Markdown construct
 # rather than letting its children flatten into loose paragraphs.
 PULLQUOTE_CLASSES = {"pull"}
 CALLOUT_CLASSES = {"note", "note key", "note warn", "note good"}
 EQUATION_CLASSES = {"eq"}
+FIGURE_CLASSES = {"fig"}
+CASE_CLASSES = {"case"}
 
 
 def collapse(text: str) -> str:
@@ -177,6 +179,14 @@ def block_md(node: Tag) -> list[str]:
             out.extend(block_md(child))
         return out
 
+    if name == "figure":
+        if classes & FIGURE_CLASSES:
+            return figure_md(node)
+        out = []
+        for child in node.children:
+            out.extend(block_md(child))
+        return out
+
     if name == "div" or name == "dl":
         if name == "dl":
             return glossary_md(node)
@@ -184,6 +194,8 @@ def block_md(node: Tag) -> list[str]:
             return pullquote_md(node)
         if classes & CALLOUT_CLASSES:
             return callout_md(node)
+        if classes & CASE_CLASSES:
+            return case_md(node)
         if classes & EQUATION_CLASSES:
             return [fenced(node.get_text(), "")]
         if "series-bar" in classes:
@@ -344,6 +356,44 @@ def glossary_md(node: Tag) -> list[str]:
     return ["\n\n".join(lines)] if lines else []
 
 
+def figure_md(node: Tag) -> list[str]:
+    """Render a diagram as its caption, with the drawing itself dropped.
+
+    The diagrams are inline SVG. They carry real information, but as text they
+    would arrive as a flat stream of box labels with no indication of what
+    connects to what -- worse than useless, because it looks like prose. The
+    caption is written to stand alone for a reader who cannot see the drawing,
+    and the ledger counts figures so a dropped caption is visible.
+    """
+    caption = node.find("figcaption")
+    if caption is None:
+        return []
+    # The caption leads with a bold sentence, which is right in HTML where the
+    # label is a small-caps chip, and wrong in Markdown where it arrives as
+    # "**Figure.** **The whole of RL.**" -- two bold runs glued together.
+    # Unwrapping the emphasis here only affects rendering; the figure and
+    # figcaption counts that the ledger protects are unaffected.
+    for emphasis in caption.find_all(["b", "strong"]):
+        emphasis.unwrap()
+    body = collapse(md_inline(caption)).strip()
+    return [f"**Figure.** {body}"] if body else []
+
+
+def case_md(node: Tag) -> list[str]:
+    """Render a worked-example box as a heading plus its ordinary blocks."""
+    out: list[str] = []
+    for child in node.children:
+        if isinstance(child, Tag) and child.name == "span" and "case-lbl" in set(
+            child.get("class", []) or []
+        ):
+            label = collapse(child.get_text()).strip()
+            if label:
+                out.append(f"**{label}**")
+            continue
+        out.extend(block_md(child))
+    return out
+
+
 def series_bar_md(node: Tag) -> list[str]:
     label = node.find("span", class_="series-label")
     here = node.find("span", class_="series-here")
@@ -444,6 +494,7 @@ def count_md(md: str) -> dict[str, int]:
         "content_rows": content_rows,
         "blank_headers": blank_headers,
         "table_rows": content_rows + separators,
+        "figures": sum(1 for line in lines if unfence(line).startswith("**Figure.** ")),
     }
 
 
@@ -470,6 +521,12 @@ def main() -> int:
         src_pre = len(body.find_all("pre"))
         src_eq = len(body.find_all("div", class_="eq"))
         src_fenced = src_pre + src_eq
+        # A figure survives as its caption, so the count to protect is captions.
+        src_figs = len(body.find_all("figure", class_="fig"))
+        src_captions = len(body.find_all("figure", class_="fig"))
+        for fig in body.find_all("figure", class_="fig"):
+            if fig.find("figcaption") is None:
+                src_captions -= 1
 
         got = count_md(md)
         report.append(
@@ -477,7 +534,8 @@ def main() -> int:
             f"    code blocks  src {src_pre:>3} pre + {src_eq} eq = {src_fenced:>3}"
             f" -> md {got['code_blocks']:>3}\n"
             f"    tables       src {src_tables:>3} -> md {got['tables']:>3}\n"
-            f"    table rows   src {src_rows:>3} -> md {got['table_rows']:>3}"
+            f"    table rows   src {src_rows:>3} -> md {got['table_rows']:>3}\n"
+            f"    figures      src {src_figs:>3} -> md {got['figures']:>3} captions"
         )
 
         # Every source code block must appear; a converter that drops one is
@@ -497,11 +555,24 @@ def main() -> int:
             )
         if got["tables"] != src_tables:
             failures.append(f"{dst_rel}: tables {src_tables} -> {got['tables']}")
+        # A figure that keeps its drawing but loses its caption is the quiet
+        # failure mode: the Markdown still reads as complete prose.
+        if got["figures"] != src_captions:
+            failures.append(
+                f"{dst_rel}: figure captions {src_captions} expected (of {src_figs} "
+                f"figures), got {got['figures']}"
+            )
 
         # Nothing from the style block or the table-of-contents nav should leak.
         for leak in ("--ink:", "@media", "box-sizing", "class=\"series-bar\""):
             if leak in md:
                 failures.append(f"{dst_rel}: presentation leaked into Markdown ({leak!r})")
+
+        # The diagrams are SVG, and the converter recurses into unknown blocks.
+        # If <svg> ever leaves SKIP_TAGS, every box label lands in the Markdown
+        # as a loose paragraph, so assert on the rendered shape of one.
+        if "<svg" in md or "viewBox" in md:
+            failures.append(f"{dst_rel}: inline SVG leaked into Markdown")
 
         # newline="\n" is load-bearing: .gitattributes pins *.md to eol=lf and
         # promises byte-stability, but Path.write_text translates \n to os.linesep,

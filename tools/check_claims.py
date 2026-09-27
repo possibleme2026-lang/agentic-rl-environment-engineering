@@ -387,6 +387,26 @@ def check_markdown_parity() -> None:
                 "Markdown separators; regenerate with tools/html_to_markdown.py"
             )
 
+        # 6. Figures survive as captions only -- the drawing is inline SVG and
+        #    cannot be reproduced in Markdown. Both halves matter: a figure whose
+        #    caption went missing reads as complete prose, and a drawing that
+        #    leaked arrives as a flat run of box labels that reads as prose too.
+        html_figs = len(re.findall(r'<figure class="fig"', html_text))
+        html_caps = len(re.findall(r"<figcaption", html_text))
+        expected_caps = min(html_figs, html_caps)
+        md_caps = len(re.findall(r"^\*\*Figure\.\*\* ", md_text, flags=re.MULTILINE))
+        checks += 1
+        if md_caps != expected_caps:
+            fail(
+                f"{md_rel}: has {md_caps} figure captions but {html_rel} has "
+                f"{html_figs} figures with {html_caps} captions; regenerate with "
+                "tools/html_to_markdown.py"
+            )
+
+        checks += 1
+        if "<svg" in md_text or "viewBox" in md_text:
+            fail(f"{md_rel}: inline SVG leaked into the Markdown from {html_rel}")
+
 
 def main() -> int:
     check_required_files()

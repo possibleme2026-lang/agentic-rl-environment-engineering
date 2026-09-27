@@ -11,7 +11,7 @@
 | | 篇目 | 内容 |
 |---|---|---|
 | **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** · [Markdown](blog/environment-engineering.md) | 领域指南。从约 80 篇论文中提炼的 environment engineering：训练级环境必须通过的五个检验、为什么「难」必须从形容词变成测量值、为什么你的 judge 可能是最弱一环、以及为什么 benchmark 一发布就开始腐烂。 |
-| **Part 2** | **[How Xiaomi MiMo-V2.6 Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | 实地勘察。把 MiMo-V2.6 开源栈一路读到配置值 —— 报告的公式逐项对应到实现它的代码，并明确指出三处论文有、开源代码没有的东西。 |
+| **Part 2** | **[How Xiaomi MiMo-V2.6 Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | 实地勘察。开头有一段写给完全没接触过 RL 的读者的引子，然后把 MiMo-V2.6 开源栈一路读到配置值 —— 报告的公式逐项对应到实现它的代码，五张图解，一个把一个 prompt 从头走到底的实例，并明确指出三处论文有、开源代码没有的东西。 |
 
 两篇都是自包含 HTML：无需构建、无需联网、零依赖。每篇同时提供 **Markdown** 版本（见上），便于纯文本阅读、diff 与离线保存；守卫会断言两种表示始终一致。
 
@@ -75,9 +75,11 @@ python tools/html_to_markdown.py
 
 `tools/check_claims.py` 是纯标准库的守卫。它校验 README 的相对链接是否落地、[`evidence/offsets.json`](evidence/offsets.json) 内部是否自洽（各族计数之和等于总数、code/cyber 镜像数等于任务数、共享镜像的域确实在共享）、每个对外页面是否不含外部资源标签从而能离线打开、series 是否可导航（两篇必须互链、落地页必须同时指向两篇，一次改名就不会把读者悄悄留在死路上），以及每篇 HTML 与它的 Markdown 伴生文件是否仍描述同一份文档。
 
-`tools/html_to_markdown.py` 负责这个转换，并且**自己核对账目**：先在源 DOM 里数代码块、表格与表格行，再在生成的 Markdown 里数一遍，只要有清单或行丢失就以非零退出。Part 2 有两个代码清单位于提示框内部，而把提示框压成一行字符串的转换器会静默毁掉它们的围栏 —— 这正是台账能抓住的失败模式。
+`tools/html_to_markdown.py` 负责这个转换，并且**自己核对账目**：先在源 DOM 里数代码块、表格、表格行与图注，再在生成的 Markdown 里数一遍，只要有清单、行或图注丢失就以非零退出。Part 2 有两个代码清单位于提示框内部，而把提示框压成一行字符串的转换器会静默毁掉它们的围栏 —— 这正是台账能抓住的失败模式。图解只以图注形式保留（图是内联 SVG，Markdown 无法表示），转换器同时断言没有任何 `<svg>` 文字漏进正文。
 
-`tools/test_check_claims.py` 才是让这个守卫可信的东西。它会构造临时仓库、向每个副本注入一处具体缺陷、断言守卫必须失败 —— **26 个突变全部被抓**。没有它，一个悄悄停止检查任何东西的守卫，看起来和一个正常工作的守卫一模一样。
+`tools/verify_rendered.py` 会真正驱动一个 headless Chrome，并在渲染后的 DOM 上断言：series 导航条的定位文字是否正确、每个相对链接是否在磁盘上落地、以及 Part 2 的**五张图解**是否都渲染出了真实几何、可读标签，和一段足以独立成立的图注。这是本地检查，不进 CI —— CI 里没有浏览器。
+
+`tools/test_check_claims.py` 才是让这个守卫可信的东西。它会构造临时仓库、向每个副本注入一处具体缺陷、断言守卫必须失败 —— **29 个突变全部被抓**。没有它，一个悄悄停止检查任何东西的守卫，看起来和一个正常工作的守卫一模一样。
 
 ### Docker 镜像
 

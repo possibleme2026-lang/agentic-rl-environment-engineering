@@ -12,6 +12,42 @@ The MiMo-V2.6 technical report describes a large-scale agentic RL run: **1,568 p
 
 So this is a reading exercise. For each claim in the report, I went looking for the code or the environment that makes it concrete — and where the code contradicts the report, I say so.
 
+## Before the code: what RL actually does
+
+If you have never trained a model with reinforcement learning, this section is the only part of the post you need before the rest of it makes sense. It is deliberately short, and nothing later depends on any other background.
+
+Reinforcement learning here means one loop, repeated until you stop paying for it:
+
+1. **Roll out.** Hand the model a task and let it attempt the task. Not once — *several* times. Each attempt is a **rollout**.
+2. **Score.** Something outside the model decides how each attempt did. For code tasks that something is usually the project's own test suite, which either passes or does not. The score is the **reward**.
+3. **Compare.** Put this task's attempts side by side and ask which ones did better than the group's own average. That gap is the **advantage**.
+4. **Update.** Nudge the weights toward the attempts carrying positive advantage, and away from the ones carrying negative advantage.
+
+**Figure.** The whole of RL, in four boxes. Steps 1 and 2 are machinery: you need a way to run the task and a way to score it. Step 3 is where the algorithm lives, and step 4 is a few lines of tensor arithmetic. Everything this post examines — the penalty module, the groupwise graders, the four harnesses — is engineering wrapped around step 3, because step 3 is where RL either works or quietly falls apart.
+
+**Why a group of 16, and not just one score.** This is the part that trips people up. A reward of 0.8 tells you nothing on its own: is that good? Bad? To learn from a number you need something to compare it against, and a hand-written threshold is just a guess wearing a lab coat. GRPO — the algorithm this release uses — compares each attempt against its *siblings* on the same task. Sixteen attempts on one prompt give you a per-task baseline for free, with no threshold to guess at.
+
+That choice is also where the trouble starts, and it explains most of the design decisions in the sections that follow. If the baseline is the group's own mean, then the baseline is only meaningful when all sixteen attempts were handed *the same task in the same environment*. Break that and you are comparing scores from two different worlds. Hold onto that thought — it is the entire reason for the harness-mixing rule in §7 and for half of what the penalty module does in §5.
+
+**The scale.** The report describes 1,568 prompts per step, 16 rollouts each: **25,000 trajectories per training step**, 2.7–3.7 billion tokens per batch, up to 1M-token contexts. That is the number this whole release is built around, and it is why so much of the code is about plumbing rather than about learning.
+
+**Worked case · one prompt, one step**
+
+#### What actually happens to one prompt, end to end
+
+Abstract loops are easy to nod along to and hard to hold in your head. So here is a single prompt traced through a single training step, using only values that appear in the released configuration. Where I do arithmetic on those values I say so; nothing here is a measured result.
+
+1. **The Sample Mixer picks a prompt.** Say it is one of the 2,698 code tasks. Each one ships with its own Docker image and its own test suite.
+2. **A step-hash decides which harness runs it.** `sha256(seed, harness_round, sample_key)` is reduced modulo four and picks one of `mini-bash`, `mini-mimocode`, `mini-claude-code`, `mini-codex`. **All 16 rollouts run in that same harness**, in containers capped at `cpu_limit: 4`, `memory_limit: 8Gi`, `step_limit: 500`.
+3. **Each rollout is scored by the task's tests.** Binary: 1 or 0. No partial credit at this layer.
+4. **Degenerate groups are thrown away.** With `filter_groups.enable: true`, a group where all 16 pass or all 16 fail is dropped. Sixteen identical scores carry no information: zero variance, zero gradient, wasted compute.
+5. **The survivors get an advantage.** `advantage = reward − group mean`. Note `norm_adv_by_std_in_grpo: false` — there is no division by the group's standard deviation, so the signal stays proportional to the actual gap in reward rather than being inflated by a near-degenerate group.
+6. **The gradient is averaged per prompt, not per token.** `loss_agg_mode: prompt-mean` means this prompt contributes **1/1568 of the step's gradient** whether its rollouts took 3 turns or 300.
+
+**The arithmetic, spelled out.** Suppose 3 of the 16 rollouts pass. The group mean is 3/16 = 0.1875, so each passing rollout carries an advantage of 1 − 0.1875 = **+0.8125**, and each of the 13 failures carries 0 − 0.1875 = **−0.1875**. Training then raises the probability of the three winning trajectories and lowers that of the thirteen others. This is arithmetic on the shipped configuration, not a measurement from the run.
+
+The last step is the one worth noticing. A 50-turn trajectory and a 1-turn trajectory count the same, which matters because §5.5 of the report lists trajectories hitting their length limit as a primary failure mode. Averaging over tokens instead would have handed the longest trajectories the most gradient — rewarding the model for *taking longer* rather than for *being right*.
+
 ## 1. What was actually released (and what wasn't)
 
 Five artifacts, all public:
@@ -119,6 +155,8 @@ Sample  →  one prompt dispatched by the Sample Mixer (spawns a GRPO group)
 ```
 
 This hierarchy is not cosmetic — it's what makes the Penalty Module able to target a decision at the right granularity. Hold that thought for §5.
+
+**Figure.** Four levels, and the one that matters for training. The hierarchy exists so a penalty can be aimed precisely. The Sample is the group that gets a single accept/reject verdict, the Sequence is one attempt inside it, the Context is a dialogue branch, and the Segment is a single turn. Only model-generated segments reach the loss — a tool that returns an unhelpful result is not the model's fault, so it cannot be trained away. Reading the penalty module in §5 without this picture is what makes its `level` field look arbitrary.
 
 ## 4. GRPO, but engineered
 
@@ -319,6 +357,8 @@ Ri = Rtesti · Ssoli · Sbehi
 
 Multiplicative rather than additive, deliberately: "This multiplicative form keeps rubric supervision tied to test outcomes. Failed trajectories retain zero reward, while passing trajectories are further distinguished by implementation quality and problem-solving behavior." When every rollout passes, the product of the two rubric scores still separates them — that's the learning signal binary rewards throw away.
 
+**Figure.** Why the reward multiplies instead of adding. These four rollouts all pass, so the test score is 1.0 for each and the group looks degenerate. The rubric scores are what separate them. Addition is the intuitive choice and it is wrong here: a failing rollout would still collect its rubric points, so a model could learn to write elegant, well-argued patches that do not actually work — the exact failure the report calls out ("broad exports, exception swallowing, relaxed validation"). Multiplication kills that path, because any zero anywhere makes the whole product zero. Test outcome gates the reward; rubrics only rank within the survivors. (The rubric values are illustrative; the multiplication is the shipped `R = Rtest · Ssol · Sbeh`.)
+
 The report gives a qualitative justification for why this beats naive patch-size penalties: policies trained with online grading "produce smaller, more precise patches that remained within the requested scope", whereas workarounds such as "broad exports, exception swallowing, relaxed validation" aim to pass tests "but can exceed the scope of the task instructions".
 
 ### 6.2 GAR — Groupwise Advantage Redistribution (online)
@@ -402,6 +442,8 @@ label, config_path = specs[index % len(specs)]
 
 Crucially, **a GRPO group stays on one arm**, and the sample rotates across arms between steps. The env example states the consequence plainly: "With four harness arms and step-hash mixing, a group stays on one arm and the sample rotates across arms between steps, so N does not need to be a multiple of four."
 
+**Figure.** Why a group may not be split across harnesses. GRPO's baseline is the group's own mean, which is only a baseline if every member faced the same conditions. Split one group over four harnesses and you are averaging scores from four different worlds — a low score might mean a weak attempt, or it might just mean a terser tool set. The shipped design keeps the group intact and rotates the *prompt* instead, so over many steps every prompt still sees every harness. This is also why `N=16` need not be a multiple of four, which is the sort of detail that looks arbitrary until you see the constraint behind it.
+
 That's a real constraint, not a nicety. If a group's 16 rollouts were split across 4 harnesses, the group-relative advantage would be comparing scores from *different environments* — the baseline would be meaningless.
 
 On the seed, the env example is emphatic:
@@ -449,6 +491,8 @@ Two things to admire here. First, the number 76.6% is shockingly high — nearly
 | Probe versions | Sphinx return-type doc | Compare later releases for the fix |
 
 The defence has three layers, and the code implements the third.
+
+**Figure.** Three layers, of which one is actually in the released code. Layers 1 and 2 are training-data and environment hygiene; only layer 3 — the adversarial screening — is what the repository ships, and only its first stage. The design choice worth copying is interception over termination: a hacked tool call returns a harmless dummy result instead of killing the rollout. Blocking looks stricter and is worse, because punishing by rejection removes the trajectory from the advantage calculation, and a model never punished for trying a shortcut never learns that shortcuts fail. The logged confirmed-hack share stays under 2% across the whole run.
 
 **Layer 1 — mid-training alignment data.** Cases were synthesised where "MiMo reflects on the faulty reasoning, revises the relevant turn, and continues with actions grounded in the task specification", with the revised reasoning keeping "the original error recognizable".
 

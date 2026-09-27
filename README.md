@@ -11,7 +11,7 @@ English | [简体中文](README.zh-CN.md)
 | | Instalment | What it is |
 |---|---|---|
 | **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** · [Markdown](blog/environment-engineering.md) | The field guide. Environment engineering drawn from ~80 papers: the five tests a training-grade environment must pass, why difficulty had to become a measurement, why your judge may be the weakest link, and why a benchmark rots the moment you publish it. |
-| **Part 2** | **[How Xiaomi MiMo-V2.6 Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | The ground survey. The MiMo-V2.6 open stack read down to the config values — report equations traced to the code that implements them, and three claims the released code does not implement at all. |
+| **Part 2** | **[How Xiaomi MiMo-V2.6 Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | The ground survey. Opens with a primer for readers who have never touched RL, then reads the MiMo-V2.6 open stack down to the config values — report equations traced to the code that implements them, five diagrams, a worked case traced through one prompt, and three claims the released code does not implement at all. |
 
 Both are self-contained HTML: no build step, no network, no dependencies. Each instalment also ships as **Markdown** (linked above) for plain-text reading, diffing, and offline copies; a gate asserts the two representations stay in step.
 
@@ -75,9 +75,11 @@ python tools/html_to_markdown.py
 
 `tools/check_claims.py` is a standard-library-only gate. It verifies that the README's relative links resolve, that [`evidence/offsets.json`](evidence/offsets.json) is internally consistent (family counts sum to the total, code/cyber images equal task counts, shared-image domains really do share), that every served page contains no external resource tags so it stays viewable offline, that the series is navigable — each instalment links the other and the landing page reaches both, so a rename cannot silently strand a reader — and that each HTML post and its Markdown twin still describe the same document.
 
-`tools/html_to_markdown.py` does that conversion and checks its own work: it counts code blocks, tables and table rows in the source DOM, counts them again in the Markdown it produced, and exits non-zero if any listing or row failed to survive. Two of Part 2's code listings live inside callout boxes, and a converter that flattens a callout into one string silently destroys their fences — which is exactly the failure the ledger catches.
+`tools/html_to_markdown.py` does that conversion and checks its own work: it counts code blocks, tables, table rows and figure captions in the source DOM, counts them again in the Markdown it produced, and exits non-zero if any listing, row or caption failed to survive. Two of Part 2's code listings live inside callout boxes, and a converter that flattens a callout into one string silently destroys their fences — which is exactly the failure the ledger catches. Figures survive as captions only, because the diagrams are inline SVG and have no Markdown representation; the converter asserts that no `<svg>` text leaks into the prose.
 
-`tools/test_check_claims.py` is what makes that gate trustworthy. It builds throwaway repositories, injects one deliberate defect into each, and asserts the gate fails — **26 mutations, all detected**. Without it, a gate that silently stopped checking anything would look exactly like a gate that works.
+`tools/verify_rendered.py` drives a real headless Chrome and asserts on the post-render DOM — that the series bars carry the right position text, that every relative link resolves on disk, and that each of Part 2's **five diagrams** rendered with real geometry, readable labels and a caption long enough to stand alone. It is a local check, not a CI job: CI has no browser.
+
+`tools/test_check_claims.py` is what makes that gate trustworthy. It builds throwaway repositories, injects one deliberate defect into each, and asserts the gate fails — **29 mutations, all detected**. Without it, a gate that silently stopped checking anything would look exactly like a gate that works.
 
 ### Docker images
 
