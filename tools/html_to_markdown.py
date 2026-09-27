@@ -271,9 +271,7 @@ def list_md(node: Tag, depth: int = 0) -> list[str]:
     """Render ul/ol, nesting one level per indent unit."""
     ordered = node.name == "ol"
     lines: list[str] = []
-    index = 0
-    for li in node.find_all("li", recursive=False):
-        index += 1
+    for index, li in enumerate(node.find_all("li", recursive=False), start=1):
         marker = f"{index}." if ordered else "-"
 
         # Separate the item's own text from any nested list.
@@ -505,7 +503,12 @@ def main() -> int:
             if leak in md:
                 failures.append(f"{dst_rel}: presentation leaked into Markdown ({leak!r})")
 
-        dst.write_text(md.rstrip() + "\n", encoding="utf-8")
+        # newline="\n" is load-bearing: .gitattributes pins *.md to eol=lf and
+        # promises byte-stability, but Path.write_text translates \n to os.linesep,
+        # so on Windows this would emit CRLF and the CI job (which regenerates and
+        # diffs on Linux) would see every line as changed.
+        with open(dst, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(md.rstrip() + "\n")
 
     print("Conversion ledger:")
     print("\n".join(report))

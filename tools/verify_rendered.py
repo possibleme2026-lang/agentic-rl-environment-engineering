@@ -53,7 +53,7 @@ def text_of(dom: str, class_name: str) -> list[str]:
     for block in re.findall(
         rf'<div class="{class_name}"[^>]*>(.*?)</div>\s*(?=<div|</main>|</body>)',
         dom,
-        flags=re.S,
+        flags=re.DOTALL,
     ):
         out.append(html.unescape(TAG_RE.sub(" ", block)).strip())
     return out

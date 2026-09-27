@@ -1,6 +1,6 @@
 *RL Post-Training · Code Reading*
 
-# How Xiaomi Actually Does RL
+# How Xiaomi MiMo-V2.6 Actually Does RL
 
 *Reading the MiMo-V2.6 open stack — the technical report, the `XiaomiMiMo/verl` fork, 1,000+ real task environments, and 3,764 Docker images — and mapping every claim to the code that implements it.*
 

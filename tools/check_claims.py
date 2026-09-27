@@ -313,12 +313,12 @@ def check_markdown_parity() -> None:
         md_text = md_path.read_text(encoding="utf-8")
 
         # 1. Section headings: every <h2> except a pure-nav one must appear as "##".
-        html_h2 = re.findall(r"<h2[^>]*>(.*?)</h2>", html_text, flags=re.S)
+        html_h2 = re.findall(r"<h2[^>]*>(.*?)</h2>", html_text, flags=re.DOTALL)
         html_h2 = [re.sub(r"<[^>]+>", "", h).strip() for h in html_h2]
         if toc_heading:
             html_h2 = [h for h in html_h2 if h != toc_heading]
         html_sections = len(html_h2)
-        md_sections = len(re.findall(r"^## ", md_text, flags=re.M))
+        md_sections = len(re.findall(r"^## ", md_text, flags=re.MULTILINE))
         checks += 1
         if html_sections != md_sections:
             fail(

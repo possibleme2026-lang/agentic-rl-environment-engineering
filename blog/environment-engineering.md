@@ -468,6 +468,6 @@ End. Two threads to carry out: the **GEF loop** (Generate–Execute–Feedback) 
 
 **Read next · Part 2 of 2**
 
-### [How Xiaomi Actually Does RL — reading the MiMo-V2.6 open stack](mimo-v2.6-rl.html)
+### [How Xiaomi MiMo-V2.6 Actually Does RL](mimo-v2.6-rl.html)
 
 This instalment argued that environment engineering is the real bottleneck, and closed on an open call: contributing a world should be as easy as opening a pull request. Part 2 examines a release that answers that call — a model lab shipping not just a report and a training recipe, but the environments themselves as 3,764 runnable Docker images with verifiers and manifests attached. Every claim in its report is traced to the file, config value, or task environment that implements it, including three claims the released code does *not* implement. Where Part 1 is a map of the field, Part 2 is the ground survey.

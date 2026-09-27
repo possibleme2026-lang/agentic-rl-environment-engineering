@@ -11,7 +11,7 @@
 | | 篇目 | 内容 |
 |---|---|---|
 | **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** · [Markdown](blog/environment-engineering.md) | 领域指南。从约 80 篇论文中提炼的 environment engineering：训练级环境必须通过的五个检验、为什么「难」必须从形容词变成测量值、为什么你的 judge 可能是最弱一环、以及为什么 benchmark 一发布就开始腐烂。 |
-| **Part 2** | **[How Xiaomi Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | 实地勘察。把 MiMo-V2.6 开源栈一路读到配置值 —— 报告的公式逐项对应到实现它的代码，并明确指出三处论文有、开源代码没有的东西。 |
+| **Part 2** | **[How Xiaomi MiMo-V2.6 Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | 实地勘察。把 MiMo-V2.6 开源栈一路读到配置值 —— 报告的公式逐项对应到实现它的代码，并明确指出三处论文有、开源代码没有的东西。 |
 
 两篇都是自包含 HTML：无需构建、无需联网、零依赖。每篇同时提供 **Markdown** 版本（见上），便于纯文本阅读、diff 与离线保存；守卫会断言两种表示始终一致。
 

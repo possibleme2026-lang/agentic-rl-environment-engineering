@@ -11,7 +11,7 @@ English | [简体中文](README.zh-CN.md)
 | | Instalment | What it is |
 |---|---|---|
 | **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** · [Markdown](blog/environment-engineering.md) | The field guide. Environment engineering drawn from ~80 papers: the five tests a training-grade environment must pass, why difficulty had to become a measurement, why your judge may be the weakest link, and why a benchmark rots the moment you publish it. |
-| **Part 2** | **[How Xiaomi Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | The ground survey. The MiMo-V2.6 open stack read down to the config values — report equations traced to the code that implements them, and three claims the released code does not implement at all. |
+| **Part 2** | **[How Xiaomi MiMo-V2.6 Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** · [Markdown](blog/mimo-v2.6-rl.md) | The ground survey. The MiMo-V2.6 open stack read down to the config values — report equations traced to the code that implements them, and three claims the released code does not implement at all. |
 
 Both are self-contained HTML: no build step, no network, no dependencies. Each instalment also ships as **Markdown** (linked above) for plain-text reading, diffing, and offline copies; a gate asserts the two representations stay in step.
 
