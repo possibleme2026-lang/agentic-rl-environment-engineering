@@ -2,21 +2,28 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**Reading the MiMo-V2.6 open stack end to end** — the technical report, the released `verl` fork, 7,780 real task rows, and 3,764 Docker images — and mapping every claim about how the RL was actually done onto the file, config value, or environment that implements it.
+**The binding constraint on how capable an agent becomes is not the model — it is the worlds it practices in.** This repository is a two-part series on that claim: a field guide to the discipline, and a close reading of one release that puts it on trial.
 
 [![CI](https://github.com/possibleme2026-lang/agentic-rl-environment-engineering/actions/workflows/ci.yml/badge.svg)](https://github.com/possibleme2026-lang/agentic-rl-environment-engineering/actions/workflows/ci.yml)
 
-📄 **[Read the blog post →](blog/mimo-v2.6-rl.html)** — self-contained HTML, no build step, no network.
+🏠 **[Landing page →](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/)**
+
+| | Instalment | What it is |
+|---|---|---|
+| **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** | The field guide. Environment engineering drawn from ~80 papers: the five tests a training-grade environment must pass, why difficulty had to become a measurement, why your judge may be the weakest link, and why a benchmark rots the moment you publish it. |
+| **Part 2** | **[How Xiaomi Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** | The ground survey. The MiMo-V2.6 open stack read down to the config values — report equations traced to the code that implements them, and three claims the released code does not implement at all. |
+
+Both are self-contained HTML: no build step, no network, no dependencies.
 
 ---
 
 ## What this is
 
-Xiaomi released a 44-page report on MiMo-V2.6 describing RL at a scale most teams never reach: 1,568 prompts × 16 rollouts = **25,000 trajectories per step**, 2.7–3.7B tokens per batch, 1M-token contexts, balancing three scaling axes at once — training compute, environment/harness diversity, and *grader* compute.
+Part 1 opens with a number that should bother you. Take Qwen2.5-Coder-32B, point it at SWE-bench Verified, and it scores **6.2%**. Change only *where it trains* — not the model, not the algorithm — and the same 32B model reaches **68.2%**. Environment engineering is the field that moves that number, and it is the part of the agent stack nobody has named.
 
-Reports like this usually stop at the equations. What makes this release unusual is that the recipe is also shipped: a `verl` fork implementing the algorithm, the task environments as runnable Docker images, and the training data with a manifest tying each row to its image.
+Part 2 asks whether anyone answers that. Xiaomi released a 44-page report on MiMo-V2.6 describing RL at a scale most teams never reach: 1,568 prompts × 16 rollouts = **25,000 trajectories per step**, 2.7–3.7B tokens per batch, 1M-token contexts, balancing three scaling axes at once. What makes the release unusual is that the recipe ships too: a `verl` fork implementing the algorithm, the task environments as runnable Docker images, and a training-data manifest tying each row to its image.
 
-So the blog is a reading exercise. For each claim in the report, it finds the code or environment that makes it concrete — and where the code contradicts or bounds the report, it says so plainly. This repository holds that blog plus the evidence behind it.
+So Part 2 is a reading exercise. For each claim in the report it finds the code or environment that makes it concrete — and where the code contradicts or bounds the report, it says so plainly.
 
 ## Findings
 
@@ -62,9 +69,9 @@ python tools/check_claims.py
 python -m pytest tools/test_check_claims.py -q
 ```
 
-`tools/check_claims.py` is a standard-library-only gate. It verifies that the README's relative links resolve, that [`evidence/offsets.json`](evidence/offsets.json) is internally consistent (family counts sum to the total, code/cyber images equal task counts, shared-image domains really do share), and that the blog contains no external resource tags so it stays viewable offline.
+`tools/check_claims.py` is a standard-library-only gate. It verifies that the README's relative links resolve, that [`evidence/offsets.json`](evidence/offsets.json) is internally consistent (family counts sum to the total, code/cyber images equal task counts, shared-image domains really do share), that every served page contains no external resource tags so it stays viewable offline, and that the series is navigable — each instalment links the other and the landing page reaches both, so a rename cannot silently strand a reader.
 
-`tools/test_check_claims.py` is what makes that gate trustworthy. It builds throwaway repositories, injects one deliberate defect into each, and asserts the gate fails — **13 mutations, all detected**. Without it, a gate that silently stopped checking anything would look exactly like a gate that works.
+`tools/test_check_claims.py` is what makes that gate trustworthy. It builds throwaway repositories, injects one deliberate defect into each, and asserts the gate fails — **21 mutations, all detected**. Without it, a gate that silently stopped checking anything would look exactly like a gate that works.
 
 ### Docker images
 
@@ -81,33 +88,36 @@ curl -sL -H "Authorization: Bearer $TOKEN" \
 ## Repository layout
 
 ```
-blog/mimo-v2.6-rl.html      the post — single file, inline CSS, zero dependencies
-evidence/VERIFICATION.md    raw commands and output for every claim
-evidence/offsets.json       machine-readable count ledger, checked in CI
-tools/check_claims.py       stdlib-only gate over links, ledger, and blog self-containment
-tools/test_check_claims.py  negative tests proving the gate fails on each defect
+index.html                          landing page (GitHub Pages root) — the series entry point
+blog/environment-engineering.html    Part 1 — the field guide (~80 papers)
+blog/mimo-v2.6-rl.html               Part 2 — the MiMo-V2.6 ground survey
+evidence/VERIFICATION.md             raw commands and output for every claim
+evidence/offsets.json                machine-readable count ledger, checked in CI
+tools/check_claims.py                stdlib-only gate over links, ledger, series navigation, page self-containment
+tools/test_check_claims.py           negative tests proving the gate fails on each defect
 ```
 
 ## Scope and limits
 
-This is **analysis, not a reproduction**. Nothing here trains a model; no GPU is involved.
+Part 1 is a **synthesis of published literature**; Part 2 is **analysis, not a reproduction**. Nothing here trains a model; no GPU is involved.
 
-- Every claim traces to a file path, config value, parquet field, image tag, or report section. Line numbers cited in the blog refer to the `pypdf` text extraction of the report, not to PDF page coordinates.
-- **One finding is explicitly labelled an open question**: why 925 `general_agent` tasks share a single image while 64 `terminal_bench` tasks each get their own. The split is read directly from the `docker_image` column, but the *mechanism* is inferred from `manifest.json` — no line of code was found that draws the boundary.
-- The report's production numbers (MiMo-V2.6-Pro: lr 3×10⁻⁶, 384 experts/layer) describe the internal run, not the released 9B recipe (lr 1×10⁻⁶). They are not interchangeable and the blog keeps them separate.
+- Every claim in Part 2 traces to a file path, config value, parquet field, image tag, or report section. Line numbers cited there refer to the `pypdf` text extraction of the report, not to PDF page coordinates.
+- **One Part 2 finding is explicitly labelled an open question**: why 925 `general_agent` tasks share a single image while 64 `terminal_bench` tasks each get their own. The split is read directly from the `docker_image` column, but the *mechanism* is inferred from `manifest.json` — no line of code was found that draws the boundary.
+- Part 2's report numbers (MiMo-V2.6-Pro: lr 3×10⁻⁶, 384 experts/layer) describe the internal run, not the released 9B recipe (lr 1×10⁻⁶). They are not interchangeable and the writing keeps them separate.
 - Upstream-presence checks record HTTP status codes only; they establish that a path does not exist upstream, not why.
+- Part 1 draws on ~80 papers; its arXiv identifiers and result figures are reproduced as published there, and are not re-verified in this repository. Where a Part 1 paper and Part 2's code disagree, Part 2 is the ground truth.
 
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
 
-This repository contains **no code from Xiaomi, ByteDance, or `verl-project/verl`**. It is an independent analysis: the blog is original prose, `check_claims.py` is original, and `offsets.json` records facts read from public artifacts. The `verl` fork and the Docker images remain under their own licenses and are the property of their respective owners.
+This repository contains **no code from Xiaomi, ByteDance, or `verl-project/verl`**. It is an independent analysis: both instalments are original prose, `check_claims.py` is original, and `offsets.json` records facts read from public artifacts. The `verl` fork and the Docker images remain under their own licenses and are the property of their respective owners. Part 1 cites third-party papers by identifier and link only.
 
 ## References
 
 The analysis builds directly on work by others:
 
-- **MiMo-V2.6** — *MiMo-V2.6: Scaling Reinforcement Learning Towards Self-Improvement*, Xiaomi MiMo Team. Technical report, 44 pp. Defines everything analysed here: the three scaling axes (§4), groupwise agentic grading (§4.3), multi-harness training (§4.2.5), reward-hacking mitigation (§4.2.6), and RL infrastructure (§6).
+- **MiMo-V2.6** — *MiMo-V2.6: Scaling Reinforcement Learning Towards Self-Improvement*, Xiaomi MiMo Team. Technical report, 44 pp. Defines everything analysed in Part 2: the three scaling axes (§4), groupwise agentic grading (§4.3), multi-harness training (§4.2.5), reward-hacking mitigation (§4.2.6), and RL infrastructure (§6).
 - **`XiaomiMiMo/verl`** — RL training fork at commit `a2ad9f6`, based on [`verl-project/verl`](https://github.com/verl-project/verl) `0.9.0.dev`.
 - **`XiaomiMiMo/mimoagent`** — agent harnesses, tools, execution environments and graders. Fork of [SWE-agent/mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent).
 - **`XiaomiMiMo/uni-agent`** — model gateway and TransferQueue trajectory capture. Fork of [verl-project/uni-agent](https://github.com/verl-project/uni-agent).
@@ -116,4 +126,6 @@ The analysis builds directly on work by others:
 - **Muown** — the Muon + AdamW hybrid optimizer, with row-norm control, used for the mid-training switch.
 - **GLM-5.2** — cited by `antihack.py` as the source of the two-stage online guard design.
 
-With thanks to the MiMo team for releasing the environments, verifiers, and images that make this kind of reading possible at all.
+Part 1's own reference list — roughly eighty papers and frameworks across nine categories, with arXiv identifiers — is at the end of [the Part 1 post](blog/environment-engineering.html#index).
+
+With thanks to the MiMo team for releasing the environments, verifiers, and images that make this kind of reading possible at all, and to the authors whose work Part 1 synthesises.

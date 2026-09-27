@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic RL Environment Engineering</title>
+<meta name="description" content="A two-part series on environment engineering for agentic RL: a field guide drawn from ~80 papers, and a close reading of the MiMo-V2.6 open stack that puts the ideas on trial.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f7f7f8;
+    --ink: #1a2330;
+    --ink-soft: #3c4a5c;
+    --ink-faint: #6b7a8d;
+    --rule: #e3e7ec;
+    --accent: #c2410c;
+    --accent-soft: #ffedd5;
+    --teal: #0f766e;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--teal); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { padding: 68px 0 38px; border-bottom: 1px solid var(--rule); }
+  .kicker {
+    font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin: 0 0 18px;
+  }
+  h1 { font-size: 39px; line-height: 1.16; letter-spacing: -.02em; margin: 0 0 18px; font-weight: 800; }
+  .lede { font-size: 18.5px; color: var(--ink-soft); margin: 0 0 26px; max-width: 64ch; }
+  .meta { font-size: 13.5px; color: var(--ink-faint); margin: 0; }
+
+  section { padding: 46px 0; border-bottom: 1px solid var(--rule); }
+  section:last-of-type { border-bottom: 0; }
+  h2 {
+    font-size: 12.5px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 700; margin: 0 0 24px;
+  }
+
+  /* ---- part cards ---- */
+  .part {
+    border: 1px solid var(--rule); border-left: 4px solid var(--accent);
+    border-radius: 12px; padding: 26px 30px; margin-bottom: 20px;
+    background: #fff; transition: border-color .15s;
+  }
+  .part:hover { border-color: #cfd5dd; border-left-color: var(--accent); }
+  .part .tag {
+    display: inline-block; font-size: 11px; letter-spacing: .13em; text-transform: uppercase;
+    font-weight: 700; color: var(--accent); background: var(--accent-soft);
+    padding: 3px 10px; border-radius: 999px; margin-bottom: 14px;
+  }
+  .part h3 { margin: 0 0 6px; font-size: 23px; line-height: 1.3; font-weight: 750; letter-spacing: -.01em; }
+  .part h3 a { color: var(--ink); }
+  .part h3 a:hover { color: var(--accent); text-decoration: none; }
+  .part .sub { margin: 0 0 14px; font-size: 14.5px; color: var(--ink-faint); font-style: italic; }
+  .part p { margin: 0 0 14px; color: var(--ink-soft); font-size: 15.3px; }
+  .part ul { margin: 0 0 16px; padding-left: 20px; }
+  .part li { margin: 0 0 7px; font-size: 15px; color: var(--ink-soft); }
+  .part .stat {
+    display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px;
+  }
+  .part .stat span {
+    font-size: 12.5px; color: var(--ink-faint);
+    background: var(--bg-soft); border: 1px solid var(--rule);
+    padding: 3px 10px; border-radius: 999px;
+  }
+  .part .go { font-weight: 650; font-size: 15px; }
+
+  code {
+    font-family: var(--mono); font-size: .87em;
+    background: var(--bg-soft); border: 1px solid var(--rule);
+    padding: 1px 5px; border-radius: 4px; color: var(--ink);
+    word-break: break-word;
+  }
+
+  .repo-links { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
+  .btn {
+    display: inline-block; padding: 10px 18px; border-radius: 7px;
+    font-size: 14.5px; font-weight: 600; border: 1px solid var(--rule);
+    background: #fff; color: var(--ink);
+  }
+  .btn:hover { text-decoration: none; border-color: #c9ced6; }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn.primary:hover { background: #0f172a; }
+
+  footer { padding: 38px 0 64px; font-size: 14px; color: var(--ink-faint); }
+  footer p { margin: 0 0 8px; }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 29px; }
+    .lede { font-size: 16.5px; }
+    header { padding: 46px 0 30px; }
+    section { padding: 34px 0; }
+    .part { padding: 22px 20px; }
+    .part h3 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="kicker">A two-part series &middot; Agentic RL</p>
+  <h1>Agentic RL Environment Engineering</h1>
+  <p class="lede">
+    The binding constraint on how capable an agent becomes is no longer the model.
+    It is the worlds it practices in &mdash; how many, how hard, how trustworthy.
+    This series approaches that claim from two directions: a field guide to the
+    discipline, and a close reading of one release that puts the ideas on trial.
+  </p>
+  <p class="meta">Apache-2.0 &middot; every claim in both instalments is regenerated by a gate on each push</p>
+</header>
+
+<section>
+  <h2>The two instalments</h2>
+
+  <div class="part">
+    <span class="tag">Part 1 &middot; The field guide</span>
+    <h3><a href="blog/environment-engineering.html">Your Agent Is Only as Smart as the World It Trains In</a></h3>
+    <p class="sub">Nobody is scaling the world.</p>
+    <p>
+      A wide-angle map of <strong>environment engineering</strong> &mdash; the discipline
+      that decides what an agent can possibly learn. Built from roughly eighty papers,
+      and organised around two mental models you can carry into any environment you
+      evaluate: the <strong>GEF loop</strong> (Generate&ndash;Execute&ndash;Feedback) and the
+      <strong>environment lifecycle</strong> (modeling &rarr; synthesis &rarr; evaluation &rarr; application).
+    </p>
+    <ul>
+      <li>Why the same 32B model swings from <strong>6.2% to 68.2%</strong> on SWE-bench when only its training world changes.</li>
+      <li>The five tests a training-grade environment must pass &mdash; and which common "agent training data" quietly fails.</li>
+      <li>Three dirty secrets: difficulty had to become a measurement, your judge may be the weakest link, and a benchmark rots the moment you publish it.</li>
+      <li>The symbolic-vs-neural split, and why the honest answer is fusion: neural for throughput, code for the verdict.</li>
+      <li>It closes on an open call &mdash; contributing a world should be as easy as opening a pull request.</li>
+    </ul>
+    <div class="stat">
+      <span>~10,000 words</span><span>~80 papers &amp; frameworks</span><span>10 sections</span><span>glossary + paper index</span>
+    </div>
+    <p class="go"><a href="blog/environment-engineering.html">Read Part 1 &rarr;</a></p>
+  </div>
+
+  <div class="part">
+    <span class="tag">Part 2 &middot; The ground survey</span>
+    <h3><a href="blog/mimo-v2.6-rl.html">How Xiaomi Actually Does RL</a></h3>
+    <p class="sub">Reading the MiMo-V2.6 open stack down to the config values.</p>
+    <p>
+      Part 1 asks whether anyone answers its open call. Part 2 examines a release that
+      does: a 44-page report, a <code>verl</code> fork implementing the recipe, and the
+      environments themselves as <strong>3,764 runnable Docker images</strong> with verifiers
+      and manifests attached. Every RL claim in the report is traced to the file, config
+      value, or task environment that implements it &mdash; including three claims the
+      released code does not implement at all.
+    </p>
+    <ul>
+      <li><strong>Eq.(5)'s conservation is enforced numerically.</strong> Segment-level advantage reallocation ends in an <code>assert</code> that positive mass is preserved &mdash; because injecting net negative mass, with the shipped <code>use_kl_loss: false</code> and <code>entropy_coeff: 0</code>, flattens the policy and lengthens outputs.</li>
+      <li><strong>"Reference RL framework" appears eight times in the fork, zero times in the paper</strong> &mdash; the code anonymises a system the report names in &sect;6.4.</li>
+      <li><strong>Three files carry a ByteDance copyright header and 404 upstream</strong>, on both <code>v0.9.0</code> and <code>main</code>. Checked, not assumed.</li>
+      <li><strong>Four decoupled clip bounds are described; only two values ship.</strong> Across the whole repository the only values present are <code>0.2</code> and <code>0.28</code>.</li>
+      <li><strong>The data-to-environment join is exact.</strong> 3,764 mapping rows, 3,764 Docker Hub tags; code and cyber are one image per task, precisely.</li>
+      <li><strong>One GRPO group never spans two harnesses</strong>, and the anti-hack guard ships default-off, stage 1 only.</li>
+    </ul>
+    <div class="stat">
+      <span>13 sections</span><span>735 Python files read</span><span>7,780 task rows</span><span>3,764 images</span>
+    </div>
+    <p class="go"><a href="blog/mimo-v2.6-rl.html">Read Part 2 &rarr;</a></p>
+  </div>
+</section>
+
+<section>
+  <h2>How the claims are checked</h2>
+  <p style="margin:0 0 16px;color:var(--ink-soft);font-size:15.3px;">
+    Both instalments make countable claims, so the repository carries the checks that
+    would catch them drifting. <code>tools/check_claims.py</code> is a standard-library
+    gate over link resolution, the count ledger, and offline-renderability of every
+    served page. <code>tools/test_check_claims.py</code> is what makes that gate
+    trustworthy: it builds throwaway repositories, injects one deliberate defect into
+    each, and asserts the gate fails &mdash; <strong>21 mutations, all detected</strong>.
+    Without it, a gate that silently stopped checking anything would look exactly like
+    a gate that works.
+  </p>
+  <p style="margin:0 0 22px;color:var(--ink-soft);font-size:15.3px;">
+    The raw commands and their actual output behind every finding live in
+    <a href="https://github.com/possibleme2026-lang/agentic-rl-environment-engineering/blob/main/evidence/VERIFICATION.md">evidence/VERIFICATION.md</a>,
+    and the machine-readable counts in
+    <a href="https://github.com/possibleme2026-lang/agentic-rl-environment-engineering/blob/main/evidence/offsets.json">evidence/offsets.json</a>.
+  </p>
+  <div class="repo-links">
+    <a class="btn primary" href="https://github.com/possibleme2026-lang/agentic-rl-environment-engineering">Browse the repo</a>
+    <a class="btn" href="https://github.com/possibleme2026-lang/agentic-rl-environment-engineering/blob/main/README.zh-CN.md">简体中文 &middot; README</a>
+  </div>
+</section>
+
+<footer>
+  <p>Licensed under Apache-2.0. Not affiliated with Xiaomi; Part 2 is independent reading
+  of publicly released code and documentation, and contains no code from Xiaomi,
+  ByteDance, or <code>verl-project/verl</code>.</p>
+  <p><a href="https://github.com/possibleme2026-lang/agentic-rl-environment-engineering">github.com/possibleme2026-lang/agentic-rl-environment-engineering</a></p>
+</footer>
+
+</div>
+
+</body>
+</html>

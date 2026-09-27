@@ -140,6 +140,42 @@
     .wrap{padding:0 18px 80px} header.hero{padding:46px 0 32px}
     pre{font-size:11.6px}
   }
+
+  /* ---- series navigation ----
+     Self-contained: colours are hard-coded rather than inherited from the page
+     variables above, so both instalments of the series look identical even
+     though their palettes differ. */
+  .series-bar{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    background:#fff;border:1px solid #e3e7ec;border-radius:10px;
+    padding:11px 16px;margin:34px 0 30px;
+    font-size:13px;line-height:1.5;color:#6b7a8d;
+    font-family:var(--sans);
+  }
+  .series-bar .series-label{
+    letter-spacing:.12em;text-transform:uppercase;font-weight:700;
+    font-size:11px;color:#c2410c;background:#ffedd5;
+    padding:3px 9px;border-radius:999px;white-space:nowrap;
+  }
+  .series-bar .series-here{font-weight:700;color:#1a2330;}
+  .series-bar .series-spacer{flex:1;min-width:10px;}
+  .series-bar a{
+    color:#0f766e;text-decoration:none;font-weight:600;border-bottom:1px solid rgba(15,118,110,.32);
+  }
+  .series-bar a:hover{border-bottom-color:#0f766e;}
+
+  .read-prev{
+    background:#fff;border:1px solid #e3e7ec;border-left:4px solid #c2410c;
+    border-radius:12px;padding:24px 28px;margin:34px 0 0;
+  }
+  .read-prev .rp-label{
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    font-weight:700;color:#6b7a8d;margin-bottom:11px;
+  }
+  .read-prev h3{margin:0 0 10px;font-size:21px;font-weight:700;line-height:1.32;color:#1a2330;}
+  .read-prev h3 a{color:#1a2330;text-decoration:none;border-bottom:none;}
+  .read-prev h3 a:hover{color:#c2410c;}
+  .read-prev p{margin:0;color:#3c4a5c;font-size:15px;line-height:1.7;}
 </style>
 </head>
 <body>
@@ -157,6 +193,13 @@
     <span>3,764 images</span>
   </div>
 </header>
+
+<div class="series-bar">
+  <span class="series-label">Part 2 of 2</span>
+  <span class="series-here">The ground survey — one release, read down to the config values</span>
+  <span class="series-spacer"></span>
+  <a href="environment-engineering.html">&larr; Part 1: the general field guide to environment engineering</a>
+</div>
 
 <div class="toc">
   <div class="lbl">Contents</div>
@@ -921,6 +964,12 @@ _dump_raw_generation collects the evidence.</code></pre>
 </div>
 
 <hr>
+
+<div class="read-prev">
+  <div class="rp-label">Part 1 of 2 · background</div>
+  <h3><a href="environment-engineering.html">Your Agent Is Only as Smart as the World It Trains In</a></h3>
+  <p>This instalment reads one release closely. The other one reads the field: what a training-grade environment must be, why difficulty had to stop being an adjective and become a measurement, why a judge can be the weakest link in your reward, and why a benchmark rots the moment you publish it. It closes on an open call — that contributing a world should be as easy as opening a pull request — which is precisely the question the release above is an answer to. Read it first if the MiMo mechanisms feel like solutions in search of a problem.</p>
+</div>
 
 <footer>
   <p><strong>Sources.</strong> MiMo-V2.6 technical report (44 pp.). <code>github.com/XiaomiMiMo/verl</code> @ <code>a2ad9f6</code> (verl <code>0.9.0.dev</code> fork, submodules <code>mimoagent-osr</code> + <code>uni_agent</code> at <code>--depth 1</code>). Dataset <code>XiaomiMiMo/MiMo-V2.6-RL-oss</code> (5 parquets, 7,780 rows; <code>image-mapping.jsonl</code> 3,764 lines; one full <code>general_agent</code> environment sample). Docker Hub <code>xiaomimimo/mimo-v2.6-rl-oss</code> (3,764 tags; <code>general-agent-env-1</code> all 8 blobs sha256-verified; manifest/config for <code>arvo-v1-42525170</code> and <code>webdev-rl-opensource:v2</code>).</p>

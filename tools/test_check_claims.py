@@ -49,7 +49,18 @@ MINIMAL_OFFSETS = {
 }
 
 MINIMAL_BLOG = """<html><head><style>body{}</style></head>
-<body><p>self-contained</p></body></html>
+<body><p>self-contained</p><a href="environment-engineering.html">part 1</a></body></html>
+"""
+
+MINIMAL_PART1 = """<html><head><style>body{}</style></head>
+<body><p>self-contained</p><a href="mimo-v2.6-rl.html">part 2</a></body></html>
+"""
+
+MINIMAL_INDEX = """<html><head><style>body{}</style></head>
+<body>
+<a href="blog/mimo-v2.6-rl.html">post</a>
+<a href="blog/environment-engineering.html">part 1</a>
+</body></html>
 """
 
 
@@ -62,8 +73,13 @@ def build_fixture(dest: Path) -> None:
 
     (dest / "README.md").write_text(MINIMAL_README, encoding="utf-8")
     (dest / "README.zh-CN.md").write_text(MINIMAL_README, encoding="utf-8")
+    (dest / "index.html").write_text(MINIMAL_INDEX, encoding="utf-8")
+    (dest / ".nojekyll").write_text("", encoding="utf-8")
     (dest / "LICENSE").write_text("Apache License\n", encoding="utf-8")
     (dest / "blog" / "mimo-v2.6-rl.html").write_text(MINIMAL_BLOG, encoding="utf-8")
+    (dest / "blog" / "environment-engineering.html").write_text(
+        MINIMAL_PART1, encoding="utf-8"
+    )
     (dest / "evidence" / "VERIFICATION.md").write_text("# Evidence\n", encoding="utf-8")
     (dest / "evidence" / "offsets.json").write_text(
         json.dumps(MINIMAL_OFFSETS, indent=2), encoding="utf-8"
@@ -220,3 +236,95 @@ def test_detects_readme_not_linking_blog(repo: Path) -> None:
     result = run_gate(repo)
     assert result.returncode == 1
     assert "does not link the blog post" in result.stdout
+
+
+def test_detects_missing_index(repo: Path) -> None:
+    """The Pages root disappearing must not leave the site dead-ending at a 404."""
+    (repo / "index.html").unlink()
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "missing required file: index.html" in result.stdout
+
+
+def test_detects_index_not_linking_post(repo: Path) -> None:
+    (repo / "index.html").write_text(
+        "<html><head><style>a{}</style></head><body><p>nothing here</p></body></html>",
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "Pages root would hide it" in result.stdout
+
+
+def test_detects_index_hiding_one_instalment(repo: Path) -> None:
+    """Dropping only one of the two instalments must not pass as 'reaches both'."""
+    (repo / "index.html").write_text(
+        '<html><head><style>a{}</style></head><body>'
+        '<a href="blog/mimo-v2.6-rl.html">post</a>'
+        "</body></html>",
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "blog/environment-engineering.html" in result.stdout
+
+
+def test_detects_missing_part1(repo: Path) -> None:
+    (repo / "blog" / "environment-engineering.html").unlink()
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "missing required file: blog/environment-engineering.html" in result.stdout
+
+
+def test_detects_part1_not_linking_part2(repo: Path) -> None:
+    """A one-directional series still renders fine and still strands the reader."""
+    (repo / "blog" / "environment-engineering.html").write_text(
+        "<html><head><style>a{}</style></head><body><p>no onward link</p></body></html>",
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "blog/environment-engineering.html: does not link" in result.stdout
+
+
+def test_detects_part2_not_linking_part1(repo: Path) -> None:
+    (repo / "blog" / "mimo-v2.6-rl.html").write_text(
+        "<html><head><style>a{}</style></head><body><p>no back link</p></body></html>",
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "blog/mimo-v2.6-rl.html: does not link" in result.stdout
+
+
+def test_detects_external_asset_in_part1(repo: Path) -> None:
+    """Part 1 has no more licence to break offline than Part 2 does."""
+    (repo / "blog" / "environment-engineering.html").write_text(
+        '<html><head><style>a{}</style>'
+        '<link rel="stylesheet" href="https://cdn.example.com/x.css"></head>'
+        '<body><a href="mimo-v2.6-rl.html">part 2</a></body></html>',
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "blog/environment-engineering.html: references" in result.stdout
+
+
+def test_detects_missing_nojekyll(repo: Path) -> None:
+    (repo / ".nojekyll").unlink()
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert ".nojekyll" in result.stdout
+
+
+def test_detects_external_asset_in_index(repo: Path) -> None:
+    """The landing page has no more licence to break offline than the post does."""
+    (repo / "index.html").write_text(
+        '<html><head><style>a{}</style>'
+        '<script src="https://cdn.example.com/analytics.js"></script></head>'
+        '<body><a href="blog/mimo-v2.6-rl.html">post</a></body></html>',
+        encoding="utf-8",
+    )
+    result = run_gate(repo)
+    assert result.returncode == 1
+    assert "index.html: contains external resource tag" in result.stdout

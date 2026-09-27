@@ -2,21 +2,28 @@
 
 [English](README.md) | 简体中文
 
-**把 MiMo-V2.6 的开源栈完整读一遍** —— 技术报告、开源的 `verl` fork、7,780 条真实任务、3,764 个 Docker 镜像 —— 并把每一条「RL 到底是怎么做的」论断，落到实现它的那个文件、配置值或环境上。
+**决定 agent 能力上限的，已经不是模型，而是它练习时所在的世界。** 本仓库是围绕这一论断的两部曲：一篇领域指南，加一篇把指南里的东西拿去对质真实开源栈的精读。
 
 [![CI](https://github.com/possibleme2026-lang/agentic-rl-environment-engineering/actions/workflows/ci.yml/badge.svg)](https://github.com/possibleme2026-lang/agentic-rl-environment-engineering/actions/workflows/ci.yml)
 
-📄 **[阅读正文 →](blog/mimo-v2.6-rl.html)** —— 单文件 HTML，无需构建，无需联网。
+🏠 **[落地页 →](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/)**
+
+| | 篇目 | 内容 |
+|---|---|---|
+| **Part 1** | **[Your Agent Is Only as Smart as the World It Trains In](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/environment-engineering.html)** | 领域指南。从约 80 篇论文中提炼的 environment engineering：训练级环境必须通过的五个检验、为什么「难」必须从形容词变成测量值、为什么你的 judge 可能是最弱一环、以及为什么 benchmark 一发布就开始腐烂。 |
+| **Part 2** | **[How Xiaomi Actually Does RL](https://possibleme2026-lang.github.io/agentic-rl-environment-engineering/blog/mimo-v2.6-rl.html)** | 实地勘察。把 MiMo-V2.6 开源栈一路读到配置值 —— 报告的公式逐项对应到实现它的代码，并明确指出三处论文有、开源代码没有的东西。 |
+
+两篇都是自包含 HTML：无需构建、无需联网、零依赖。
 
 ---
 
 ## 这是什么
 
-小米发布了一份 44 页的 MiMo-V2.6 报告，描述了一个多数团队达不到的 RL 规模：1,568 个 prompt × 16 条 rollout = **每步 25,000 条轨迹**，每批 27–37 亿 token，上下文最长 100 万，同时平衡三个扩展维度 —— 训练算力、环境与 harness 多样性、以及**判分算力**。
+Part 1 开头是一个应当让你不安的数字。把 Qwen2.5-Coder-32B 指向 SWE-bench Verified，它得 **6.2%**。只改变它**在哪里训练** —— 模型不变、算法不变 —— 同一个 32B 模型能到 **68.2%**。Environment engineering 就是移动这个数字的领域，也是 agent 技术栈里始终没人命名的部分。
 
-这类报告通常止于公式。这次的不同在于配方也一起开源了：一个实现了该算法的 `verl` fork、可作为容器直接运行的 task 环境、以及一份把每行数据对应到镜像的训练数据清单。
+Part 2 追问：有人回应这个论断吗？小米发布了一份 44 页的 MiMo-V2.6 报告，描述了一个多数团队达不到的 RL 规模：1,568 个 prompt × 16 条 rollout = **每步 25,000 条轨迹**，每批 27–37 亿 token，上下文最长 100 万，同时平衡三个扩展维度。这次的不同在于配方也一起开源了：一个实现了该算法的 `verl` fork、可作为容器直接运行的 task 环境、以及一份把每行数据对应到镜像的训练数据清单。
 
-所以正文是一次「读代码」练习：报告里每一条论断，都去找让它落地的代码或环境 —— 代码与报告矛盾、或给报告划出边界的地方，直接讲明。本仓库就是这篇正文加它背后的证据。
+所以 Part 2 是一次「读代码」练习：报告里每一条论断，都去找让它落地的代码或环境 —— 代码与报告矛盾、或给报告划出边界的地方，直接讲明。
 
 ## 主要发现
 
@@ -59,9 +66,12 @@ snapshot_download('XiaomiMiMo/MiMo-V2.6-RL-oss', local_dir='mimo-oss-data')
 
 # 3. 重跑本仓库的机器无关检查
 python tools/check_claims.py
+python -m pytest tools/test_check_claims.py -q
 ```
 
-`tools/check_claims.py` 是纯标准库的守卫。它校验 README 的相对链接是否落地、[`evidence/offsets.json`](evidence/offsets.json) 内部是否自洽（各族计数之和等于总数、code/cyber 镜像数等于任务数、共享镜像的域确实在共享），以及正文是否不含外部资源标签从而能离线打开。
+`tools/check_claims.py` 是纯标准库的守卫。它校验 README 的相对链接是否落地、[`evidence/offsets.json`](evidence/offsets.json) 内部是否自洽（各族计数之和等于总数、code/cyber 镜像数等于任务数、共享镜像的域确实在共享）、每个对外页面是否不含外部资源标签从而能离线打开，以及 series 是否可导航 —— 两篇必须互链、落地页必须同时指向两篇，这样一次改名就不会把读者悄悄留在死路上。
+
+`tools/test_check_claims.py` 才是让这个守卫可信的东西。它会构造临时仓库、向每个副本注入一处具体缺陷、断言守卫必须失败 —— **21 个突变全部被抓**。没有它，一个悄悄停止检查任何东西的守卫，看起来和一个正常工作的守卫一模一样。
 
 ### Docker 镜像
 
@@ -78,32 +88,36 @@ curl -sL -H "Authorization: Bearer $TOKEN" \
 ## 仓库结构
 
 ```
-blog/mimo-v2.6-rl.html      正文 —— 单文件、内联 CSS、零依赖
-evidence/VERIFICATION.md    每条论断的原始命令与输出
-evidence/offsets.json       机器可读的计数台账，CI 中校验
-tools/check_claims.py       纯标准库守卫：链接、台账、正文自包含性
+index.html                          落地页（GitHub Pages 根）—— 两部曲入口
+blog/environment-engineering.html   Part 1 —— 领域指南（约 80 篇文献）
+blog/mimo-v2.6-rl.html              Part 2 —— MiMo-V2.6 实地勘察
+evidence/VERIFICATION.md            每条论断的原始命令与输出
+evidence/offsets.json               机器可读的计数台账，CI 中校验
+tools/check_claims.py               纯标准库守卫：链接、台账、series 导航、页面自包含性
+tools/test_check_claims.py          负向测试，证明守卫在每个缺陷上都会失败
 ```
 
 ## 范围与限制
 
-这是**分析，不是复现**。这里不训练任何模型，不涉及 GPU。
+Part 1 是对**已发表文献的综合**；Part 2 是**分析，不是复现**。这里不训练任何模型，不涉及 GPU。
 
-- 每条论断都可追溯到文件路径、配置值、parquet 字段、镜像 tag 或报告章节。正文引用的行号对应报告经 `pypdf` 提取后的文本，不是 PDF 页内坐标。
-- **有一处发现被明确标为未解问题**：为什么 925 个 `general_agent` 任务共用一个镜像，而 64 个 `terminal_bench` 任务各自独占一个。这个分界是直接从 `docker_image` 列读出来的，但**机制**是从 `manifest.json` 推断的 —— 没有在代码里找到划出这条线的位置。
-- 报告里的生产数字（MiMo-V2.6-Pro：lr 3×10⁻⁶、每层 384 专家）描述的是内部 run，不是开源的 9B recipe（lr 1×10⁻⁶）。两者不可互换，正文严格分开。
+- Part 2 的每条论断都可追溯到文件路径、配置值、parquet 字段、镜像 tag 或报告章节。其中引用的行号对应报告经 `pypdf` 提取后的文本，不是 PDF 页内坐标。
+- **Part 2 有一处发现被明确标为未解问题**：为什么 925 个 `general_agent` 任务共用一个镜像，而 64 个 `terminal_bench` 任务各自独占一个。这个分界是直接从 `docker_image` 列读出来的，但**机制**是从 `manifest.json` 推断的 —— 没有在代码里找到划出这条线的位置。
+- Part 2 里报告的生产数字（MiMo-V2.6-Pro：lr 3×10⁻⁶、每层 384 专家）描述的是内部 run，不是开源的 9B recipe（lr 1×10⁻⁶）。两者不可互换，写作中严格分开。
 - 上游存在性检查只记录 HTTP 状态码；它证明某个路径在上游不存在，不解释原因。
+- Part 1 建立在约 80 篇论文之上；其中的 arXiv 编号与结果数字按原发表转述，未在本仓库重新验证。当 Part 1 的某篇论文与 Part 2 的代码冲突时，以 Part 2 的代码为准。
 
 ## 许可证
 
 Apache-2.0 —— 见 [LICENSE](LICENSE)。
 
-本仓库**不含任何来自小米、字节跳动或 `verl-project/verl` 的代码**。这是独立分析：正文是原创文字，`check_claims.py` 是原创代码，`offsets.json` 记录的是从公开产物中读出的事实。`verl` fork 与 Docker 镜像仍适用其各自的许可证，归各自所有者所有。
+本仓库**不含任何来自小米、字节跳动或 `verl-project/verl` 的代码**。这是独立分析：两篇正文都是原创文字，`check_claims.py` 是原创代码，`offsets.json` 记录的是从公开产物中读出的事实。`verl` fork 与 Docker 镜像仍适用其各自的许可证，归各自所有者所有。Part 1 仅以编号与链接引用第三方论文。
 
 ## 参考
 
 本分析直接建立在他人工作之上：
 
-- **MiMo-V2.6** —— *MiMo-V2.6: Scaling Reinforcement Learning Towards Self-Improvement*，小米 MiMo 团队。技术报告，44 页。本文分析的一切都由它定义：三个扩展维度（§4）、groupwise agentic grading（§4.3）、multi-harness training（§4.2.5）、reward hacking 缓解（§4.2.6）、RL 基础设施（§6）。
+- **MiMo-V2.6** —— *MiMo-V2.6: Scaling Reinforcement Learning Towards Self-Improvement*，小米 MiMo 团队。技术报告，44 页。Part 2 分析的一切都由它定义：三个扩展维度（§4）、groupwise agentic grading（§4.3）、multi-harness training（§4.2.5）、reward hacking 缓解（§4.2.6）、RL 基础设施（§6）。
 - **`XiaomiMiMo/verl`** —— RL 训练 fork，commit `a2ad9f6`，基于 [`verl-project/verl`](https://github.com/verl-project/verl) `0.9.0.dev`。
 - **`XiaomiMiMo/mimoagent`** —— agent harness、工具、执行环境与 grader。fork 自 [SWE-agent/mini-swe-agent](https://github.com/SWE-agent/mini-swe-agent)。
 - **`XiaomiMiMo/uni-agent`** —— 模型网关与 TransferQueue 轨迹采集。fork 自 [verl-project/uni-agent](https://github.com/verl-project/uni-agent)。
@@ -112,4 +126,6 @@ Apache-2.0 —— 见 [LICENSE](LICENSE)。
 - **Muown** —— Muon + AdamW 混合优化器，带 row-norm 控制，用于 mid-training 的切换。
 - **GLM-5.2** —— `antihack.py` 引用它作为两阶段在线守卫设计的来源。
 
-感谢 MiMo 团队开源这些环境、验证器与镜像 —— 正是它们让这种程度的代码阅读成为可能。
+Part 1 自己的参考文献表 —— 九大类、约八十篇论文与框架，附 arXiv 编号 —— 在 [Part 1 正文末尾](blog/environment-engineering.html#index)。
+
+感谢 MiMo 团队开源这些环境、验证器与镜像 —— 正是它们让这种程度的代码阅读成为可能；也感谢 Part 1 所综合的那些工作的作者。

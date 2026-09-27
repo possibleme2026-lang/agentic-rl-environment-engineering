@@ -18,6 +18,7 @@ Exit code is 0 only when every check passes.
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -32,7 +33,11 @@ def root() -> Path:
 # Files that the README links to or names and which must therefore exist.
 REQUIRED = (
     "README.md",
+    "README.zh-CN.md",
     "LICENSE",
+    "index.html",
+    ".nojekyll",
+    "blog/environment-engineering.html",
     "blog/mimo-v2.6-rl.html",
     "evidence/VERIFICATION.md",
     "evidence/offsets.json",
@@ -40,6 +45,23 @@ REQUIRED = (
     ".gitattributes",
     ".github/workflows/ci.yml",
 )
+
+# Pages that must render with no network access and no build step. The landing
+# page and both instalments are served straight off the filesystem (and by
+# Pages), so an off-site asset in any of them is a silent breakage.
+SELF_CONTAINED = (
+    "index.html",
+    "blog/environment-engineering.html",
+    "blog/mimo-v2.6-rl.html",
+)
+
+# The series is only navigable if each instalment links the other and the
+# landing page reaches both. A rename would otherwise leave one-directional
+# links that still render fine and still 404.
+SERIES = {
+    "blog/environment-engineering.html": "blog/mimo-v2.6-rl.html",
+    "blog/mimo-v2.6-rl.html": "blog/environment-engineering.html",
+}
 
 # Matches markdown inline links, capturing the target. Reference-style links and
 # pure anchors are skipped by the scheme/content filters below.
@@ -153,33 +175,86 @@ def check_offsets() -> None:
 
 
 def check_blog_selfcontained() -> None:
-    """The blog must load with no network access and no build step."""
+    """The post and the landing page must load with no network and no build step."""
     global checks
-    path = root() / "blog/mimo-v2.6-rl.html"
+    for rel in SELF_CONTAINED:
+        path = root() / rel
+        if not path.is_file():
+            continue  # already reported by check_required_files
+        text = path.read_text(encoding="utf-8")
+
+        checks += 1
+        for needle, label in (
+            ("http://cdn", "a CDN over http"),
+            ("https://cdn", "a CDN over https"),
+            ("https://unpkg.com", "unpkg"),
+            ("https://cdn.jsdelivr.net", "jsDelivr"),
+        ):
+            if needle in text:
+                fail(f"{rel}: references {label} ({needle}); must be self-contained")
+
+        checks += 1
+        # External <a href> links are fine (they are citations the reader may
+        # click); <script src> / <link rel=stylesheet> are not.
+        for tag in ("<script src=", '<link rel="stylesheet"'):
+            if tag in text:
+                fail(f"{rel}: contains external resource tag {tag!r}")
+
+        checks += 1
+        if "<style>" not in text:
+            fail(f"{rel}: expected inline <style> block")
+
+
+def check_pages_entry() -> None:
+    """The Pages root must exist and reach every instalment in the series."""
+    global checks
+    path = root() / "index.html"
     if not path.is_file():
         return
     text = path.read_text(encoding="utf-8")
 
-    checks += 1
-    for needle, label in (
-        ("http://cdn", "a CDN over http"),
-        ("https://cdn", "a CDN over https"),
-        ("https://unpkg.com", "unpkg"),
-        ("https://cdn.jsdelivr.net", "jsDelivr"),
-    ):
-        if needle in text:
-            fail(f"blog/mimo-v2.6-rl.html: references {label} ({needle}); must be self-contained")
+    for rel in SELF_CONTAINED:
+        if rel == "index.html":
+            continue
+        checks += 1
+        if rel not in text:
+            fail(f"index.html: does not link {rel}; the Pages root would hide it")
 
     checks += 1
-    # External <a href> links are fine (they are citations the reader may click);
-    # <script src> / <link rel=stylesheet> are not.
-    for tag in ("<script src=", "<link rel=\"stylesheet\""):
-        if tag in text:
-            fail(f"blog/mimo-v2.6-rl.html: contains external resource tag {tag!r}")
+    # GitHub Pages disables Jekyll when this exists; without it, a directory or
+    # file name starting with an underscore silently vanishes from the build.
+    if not (root() / ".nojekyll").is_file():
+        fail(".nojekyll: missing; GitHub Pages will run Jekyll over this site")
 
+
+def check_series_links() -> None:
+    """Each instalment must link the other, in the direction it claims.
+
+    Links are checked as they are written on the page (relative to the file's own
+    directory), not as repository-relative paths: the two instalments are
+    siblings under ``blog/``, so each links the other by bare filename.
+    """
+    global checks
+    for rel, target in sorted(SERIES.items()):
+        checks += 1
+        path = root() / rel
+        if not path.is_file():
+            continue  # already reported by check_required_files
+        text = path.read_text(encoding="utf-8")
+        href = posixpath.relpath(target, posixpath.dirname(rel))
+        if href not in text:
+            other = "Part 1" if "environment-engineering" in target else "Part 2"
+            fail(f"{rel}: does not link {target} (as {href!r}); {other} becomes a dead end")
+
+    # The landing page must reach both, or the series has an orphan. It sits at
+    # the repository root, so its hrefs are repository-relative.
     checks += 1
-    if "<style>" not in text:
-        fail("blog/mimo-v2.6-rl.html: expected inline <style> block")
+    index = root() / "index.html"
+    if index.is_file():
+        text = index.read_text(encoding="utf-8")
+        missing = [rel for rel in SERIES if posixpath.relpath(rel, ".") not in text]
+        if missing:
+            fail(f"index.html: does not link {', '.join(sorted(missing))}")
 
 
 def check_readme_markers() -> None:
@@ -209,6 +284,8 @@ def main() -> int:
     check_relative_links()
     check_offsets()
     check_blog_selfcontained()
+    check_pages_entry()
+    check_series_links()
     check_readme_markers()
 
     if failures:

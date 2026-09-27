@@ -55,22 +55,32 @@ jobs:
         run: python -c "import json,pathlib; json.loads(pathlib.Path('evidence/offsets.json').read_text(encoding='utf-8')); print('offsets.json OK')"
 
   blog:
-    name: blog (self-contained)
+    name: pages (self-contained)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Assert no external resource tags in the post
+      # Both served pages must render with no network and no build step: the
+      # post is the deliverable, the landing page is the Pages root.
+      - name: Assert no external resource tags in the served pages
         run: |
           set -eu
-          f=blog/mimo-v2.6-rl.html
-          test -f "$f"
-          if grep -qE '<script[^>]+src=|<link[^>]+stylesheet' "$f"; then
-            echo "::error::$f references an external resource; the post must render offline"
-            exit 1
-          fi
-          if grep -qE 'https?://cdn\.|https?://unpkg\.com|https?://cdn\.jsdelivr\.net' "$f"; then
-            echo "::error::$f references a CDN; the post must render offline"
-            exit 1
-          fi
-          echo "self-contained OK"
+          rc=0
+          for f in index.html blog/environment-engineering.html blog/mimo-v2.6-rl.html; do
+            test -f "$f" || { echo "::error::$f is missing"; rc=1; continue; }
+            if grep -qE '<script[^>]+src=|<link[^>]+stylesheet' "$f"; then
+              echo "::error::$f references an external resource; the page must render offline"
+              rc=1
+            fi
+            if grep -qE 'https?://cdn\.|https?://unpkg\.com|https?://cdn\.jsdelivr\.net' "$f"; then
+              echo "::error::$f references a CDN; the page must render offline"
+              rc=1
+            fi
+            echo "self-contained OK: $f"
+          done
+          exit $rc
+
+      # .nojekyll keeps Pages from running the site through Jekyll, which would
+      # silently drop any path segment beginning with an underscore.
+      - name: Assert .nojekyll present
+        run: test -f .nojekyll || { echo "::error::.nojekyll missing"; exit 1; }
